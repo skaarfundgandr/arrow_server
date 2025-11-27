@@ -15,7 +15,9 @@ async fn setup() -> Result<(), result::Error> {
         .expect("Failed to get a database connection");
 
     use arrow_server_lib::data::models::schema::users::dsl::*;
+    use arrow_server_lib::data::models::schema::user_roles::dsl::*;
 
+    diesel::delete(user_roles).execute(&mut conn).await?;
     diesel::delete(users).execute(&mut conn).await?;
 
     Ok(())

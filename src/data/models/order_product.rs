@@ -28,7 +28,6 @@ pub struct NewOrderProduct {
     pub product_id: i32,
     pub quantity: i32,
     pub unit_price: BigDecimal,
-    pub line_total: Option<BigDecimal>,
 }
 
 #[derive(AsChangeset, PartialEq, Debug)]
@@ -36,5 +35,4 @@ pub struct NewOrderProduct {
 pub struct UpdateOrderProduct {
     pub quantity: Option<i32>,
     pub unit_price: Option<BigDecimal>,
-    pub line_total: Option<BigDecimal>,
 }
