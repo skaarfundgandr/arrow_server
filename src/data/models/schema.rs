@@ -1,9 +1,23 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    products (product_id) {
+        product_id -> Integer,
+        #[max_length = 100]
+        name -> Varchar,
+        #[max_length = 255]
+        product_image_uri -> Nullable<Varchar>,
+        description -> Nullable<Text>,
+        price -> Decimal,
+        created_at -> Nullable<Timestamp>,
+        updated_at -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
     user_roles (role_id) {
         role_id -> Integer,
-        user_id -> Integer,
+        user_id -> Nullable<Integer>,
         #[max_length = 50]
         name -> Varchar,
         description -> Nullable<Text>,
@@ -26,4 +40,4 @@ diesel::table! {
 
 diesel::joinable!(user_roles -> users (user_id));
 
-diesel::allow_tables_to_appear_in_same_query!(user_roles, users,);
+diesel::allow_tables_to_appear_in_same_query!(products, user_roles, users,);
