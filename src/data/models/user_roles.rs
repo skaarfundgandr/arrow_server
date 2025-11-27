@@ -10,7 +10,7 @@ use diesel::prelude::*;
 #[diesel(treat_none_as_null = true)]
 pub struct UserRole {
     pub role_id: i32,
-    pub user_id: i32,
+    pub user_id: Option<i32>,
     pub name: String,
     pub description: Option<String>,
     pub created_at: Option<chrono::NaiveDateTime>,
