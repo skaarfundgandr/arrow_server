@@ -1,5 +1,11 @@
 // @generated automatically by Diesel CLI.
 
+pub mod sql_types {
+    #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
+    #[diesel(mysql_type(name = "Set"))]
+    pub struct UserRolesPermissionsSet;
+}
+
 diesel::table! {
     order_products (order_id, product_id) {
         order_id -> Integer,
@@ -41,11 +47,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    use diesel::sql_types::*;
+    use super::sql_types::UserRolesPermissionsSet;
+
     user_roles (role_id) {
         role_id -> Integer,
         user_id -> Nullable<Integer>,
         #[max_length = 50]
         name -> Varchar,
+        #[max_length = 23]
+        permissions -> Nullable<UserRolesPermissionsSet>,
         description -> Nullable<Text>,
         created_at -> Nullable<Timestamp>,
         updated_at -> Nullable<Timestamp>,

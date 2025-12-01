@@ -1,5 +1,5 @@
 use crate::data::database::Database;
-use crate::data::models::user_roles::{NewUserRole, UpdateUserRole, UserRole};
+use crate::data::models::user_roles::{NewUserRole, RolePermissions, UpdateUserRole, UserRole};
 use crate::data::repos::traits::repository::Repository;
 use async_trait::async_trait;
 use diesel::prelude::*;
@@ -73,6 +73,58 @@ impl UserRoleRepo {
             Err(result::Error::NotFound) => Ok(None),
             Err(e) => Err(e),
         }
+    }
+
+    /// Sets permissions for a role using raw SQL (required for MySQL SET type)
+    /// # Arguments
+    /// * `id` - The role ID to update
+    /// * `perm` - The permission to set
+    /// # Returns
+    /// * `Result<(), result::Error>` - Ok(()) on success, Err on error.
+    pub async fn set_permissions(
+        &self,
+        id: i32,
+        perm: RolePermissions,
+    ) -> Result<(), result::Error> {
+        use diesel::sql_query;
+        use diesel::sql_types::{Integer, Text};
+
+        let db = Database::new().await;
+
+        let mut conn: Object<AsyncMysqlConnection> = db.get_connection().await.map_err(|e| {
+            result::Error::DatabaseError(
+                result::DatabaseErrorKind::UnableToSendCommand,
+                Box::new(e.to_string()),
+            )
+        })?;
+
+        conn.transaction(|connection| {
+            async move {
+                sql_query("UPDATE user_roles SET permissions = ? WHERE role_id = ?")
+                    .bind::<Text, _>(perm.as_str())
+                    .bind::<Integer, _>(id)
+                    .execute(connection)
+                    .await?;
+                Ok(())
+            }
+            .scope_boxed()
+        })
+        .await
+    }
+
+    // TODO: Generate tests
+    pub async fn assign_role_to_user(
+        &self,
+        user_id_val: i32,
+        role_name_val: &str,
+    ) -> Result<(), result::Error> {
+        let new_user_role = NewUserRole {
+            user_id: user_id_val,
+            name: role_name_val,
+            description: None,
+        };
+
+        self.add(new_user_role).await
     }
 }
 
