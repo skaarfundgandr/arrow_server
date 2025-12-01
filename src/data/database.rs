@@ -22,7 +22,7 @@ impl Database {
         self.pool.get().await
     }
 }
-
+/// Lazily initialized global database connection pool
 static DB_POOL: Lazy<Pool<AsyncMysqlConnection>> = Lazy::new(|| {
     dotenv().ok();
 
