@@ -24,3 +24,5 @@ azure_storage_blob = "0.7.0"
 azure_identity = "0.30.0"
 azure_storage = "0.21.0"
 tower-http = { version = "0.6.7", features = ["cors"] }
+tracing = { version = "0.1.43", features = ["attributes"] }
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }

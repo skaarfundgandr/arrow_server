@@ -1,6 +1,6 @@
 pub mod config;
 pub mod server;
 pub mod routes;
-pub mod exractors;
+pub mod extractors;
 pub mod errors;
-pub mod handlers;
+pub mod controllers;
