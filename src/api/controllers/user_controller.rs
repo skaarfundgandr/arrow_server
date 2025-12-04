@@ -20,7 +20,7 @@ pub async fn register_user(Json(new_user): Json<NewUserDTO>) -> impl IntoRespons
     let hashed_password = match auth.hash_password(&new_user.password).await {
         Ok(h) => h,
         Err(e) => {
-            eprintln!("Error hashing password: {}", e);
+            tracing::error!("Error hashing password: {}", e);
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to process password",
@@ -43,7 +43,7 @@ pub async fn register_user(Json(new_user): Json<NewUserDTO>) -> impl IntoRespons
                 .unwrap()
         }
         Err(e) => {
-            eprintln!("Error creating user: {}", e);
+            tracing::error!("Error creating user: {}", e);
             Response::builder()
                 .status(StatusCode::INTERNAL_SERVER_ERROR)
                 .body(Body::from("Failed to create user"))
@@ -59,7 +59,7 @@ pub async fn login(Json(login_user): Json<LoginDTO>) -> impl IntoResponse {
     if let Some(user) = match repo.get_by_username(&login_user.username).await {
         Ok(opt) => opt,
         Err(e) => {
-            eprintln!("Error fetching user: {}", e);
+            tracing::error!("Error fetching user: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user").into_response();
         }
     } {
@@ -70,7 +70,7 @@ pub async fn login(Json(login_user): Json<LoginDTO>) -> impl IntoResponse {
             Ok(true) => (StatusCode::OK, "Login successful").into_response(),
             Ok(false) => (StatusCode::UNAUTHORIZED, "Invalid credentials").into_response(),
             Err(e) => {
-                eprintln!("Error verifying password: {}", e);
+                tracing::error!("Error verifying password: {}", e);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to verify password",
@@ -120,7 +120,7 @@ pub async fn get_all_users() -> impl IntoResponse {
             (StatusCode::OK, Json(empty)).into_response()
         }
         Err(e) => {
-            eprintln!("Error fetching users: {}", e);
+            tracing::error!("Error fetching users: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch users").into_response()
         }
     }
@@ -137,7 +137,7 @@ pub async fn get_user(Path(user_id): Path<i32>) -> impl IntoResponse {
         }
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            eprintln!("Error fetching user: {}", e);
+            tracing::error!("Error fetching user: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user").into_response()
         }
     }
@@ -159,7 +159,7 @@ pub async fn get_user_by_name(Query(params): Query<UserQueryParams>) -> impl Int
         }
         Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            eprintln!("Error fetching user: {}", e);
+            tracing::error!("Error fetching user: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user").into_response()
         }
     }
@@ -177,7 +177,7 @@ pub async fn edit_user(
     match repo.get_by_id(user_id).await {
         Ok(None) => return (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            eprintln!("Error fetching user: {}", e);
+            tracing::error!("Error fetching user: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user").into_response();
         }
         Ok(Some(_)) => {}
@@ -188,7 +188,7 @@ pub async fn edit_user(
         match auth.hash_password(password).await {
             Ok(h) => Some(h),
             Err(e) => {
-                eprintln!("Error hashing password: {}", e);
+                tracing::error!("Error hashing password: {}", e);
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to process password").into_response();
             }
         }
@@ -204,7 +204,7 @@ pub async fn edit_user(
     match repo.update(user_id, update_form).await {
         Ok(_) => (StatusCode::OK, "User updated").into_response(),
         Err(e) => {
-            eprintln!("Error updating user: {}", e);
+            tracing::error!("Error updating user: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update user").into_response()
         }
     }
@@ -218,7 +218,7 @@ pub async fn delete_user(Path(user_id): Path<i32>) -> impl IntoResponse {
     match repo.get_by_id(user_id).await {
         Ok(None) => return (StatusCode::NOT_FOUND, "User not found").into_response(),
         Err(e) => {
-            eprintln!("Error fetching user: {}", e);
+            tracing::error!("Error fetching user: {}", e);
             return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user").into_response();
         }
         Ok(Some(_)) => {}
@@ -227,7 +227,7 @@ pub async fn delete_user(Path(user_id): Path<i32>) -> impl IntoResponse {
     match repo.delete(user_id).await {
         Ok(_) => (StatusCode::OK, "User deleted").into_response(),
         Err(e) => {
-            eprintln!("Error deleting user: {}", e);
+            tracing::error!("Error deleting user: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete user").into_response()
         }
     }
