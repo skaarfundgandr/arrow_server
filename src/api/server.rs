@@ -1,9 +1,9 @@
-use crate::api::routes::auth_routes;
+use crate::api::routes::{auth_routes, user_routes};
 use axum::body::Body;
 use axum::extract::Request;
 use axum::middleware::Next;
 use axum::response::Response;
-use axum::routing::{get, post};
+use axum::routing::{get};
 use axum::{Router, middleware};
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
@@ -15,6 +15,7 @@ pub async fn start() {
     let router = Router::new()
         .route("/api", get(|| async { "Arrow Server API is running!" }))
         .nest("/api/v1/auth", auth_routes::routes())
+        .nest("/api/v1/users", user_routes::routes())
         .with_state::<()>(())
         .layer(cors_layer)
         .layer(middleware::from_fn(logging_middleware));
