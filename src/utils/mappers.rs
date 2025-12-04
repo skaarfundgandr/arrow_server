@@ -1,7 +1,7 @@
-use crate::api::controllers::dto::{role_dto::RoleDTO, user_dto::NewUserDTO};
+use crate::api::controllers::dto::{role_dto::{NewRoleDTO, RoleDTO, UpdateRoleDTO}, user_dto::{NewUserDTO, UpdateUserDTO}};
 use crate::data::models::schema::sql_types::UserRolesPermissionsSet;
-use crate::data::models::user::NewUser;
-use crate::data::models::user_roles::{PermissionString, RolePermissions, UserRole};
+use crate::data::models::user::{NewUser, UpdateUser};
+use crate::data::models::user_roles::{NewUserRole, PermissionString, RolePermissions, UpdateUserRole, UserRole};
 use diesel::deserialize::FromSql;
 use diesel::mysql::{Mysql, MysqlValue};
 use diesel::serialize::{Output, ToSql};
@@ -13,6 +13,35 @@ impl<'a> From<&'a NewUserDTO> for NewUser<'a> {
         NewUser {
             username: &user_dto.username,
             password_hash: &user_dto.password,
+        }
+    }
+}
+
+impl<'a> From<&'a UpdateUserDTO> for UpdateUser<'a> {
+    fn from(dto: &'a UpdateUserDTO) -> Self {
+        UpdateUser {
+            username: dto.username.as_deref(),
+            password_hash: dto.password.as_deref(),
+        }
+    }
+}
+
+impl<'a> From<&'a NewRoleDTO> for NewUserRole<'a> {
+    fn from(dto: &'a NewRoleDTO) -> Self {
+        NewUserRole {
+            user_id: dto.user_id,
+            name: &dto.name,
+            description: dto.description.as_deref(),
+        }
+    }
+}
+
+impl<'a> From<&'a UpdateRoleDTO> for UpdateUserRole<'a> {
+    fn from(dto: &'a UpdateRoleDTO) -> Self {
+        UpdateUserRole {
+            user_id: None,
+            name: dto.name.as_deref(),
+            description: dto.description.as_deref(),
         }
     }
 }
@@ -40,22 +69,21 @@ impl FromSql<UserRolesPermissionsSet, Mysql> for PermissionString {
 
 impl From<UserRole> for RoleDTO {
     fn from(user_role: UserRole) -> Self {
+        let permissions = user_role
+            .get_permissions()
+            .map(|p| vec![p.as_str().to_string()])
+            .unwrap_or_default();
+
         RoleDTO {
             name: user_role.name.clone(),
-            permissions: user_role.get_permissions().unwrap().as_str().into(), // FIXME: This should contain a vector of permissions
+            permissions,
             description: user_role.description,
             created_at: user_role
                 .created_at
-                .unwrap()
-                .format("%d/%m/%Y")
-                .to_string()
-                .into(),
+                .map(|dt| dt.format("%d/%m/%Y").to_string()),
             updated_at: user_role
                 .updated_at
-                .unwrap()
-                .format("%d/%m/%Y")
-                .to_string()
-                .into(),
+                .map(|dt| dt.format("%d/%m/%Y").to_string()),
         }
     }
 }
