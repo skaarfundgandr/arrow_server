@@ -12,7 +12,7 @@ pub struct RoleDTO {
 // TODO: Do not use user_id here, use username instead and then resolve to user_id in service layer
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct NewRoleDTO {
-    pub user_id: i32,
+    pub username: String,
     pub name: String,
     pub description: Option<String>,
 }

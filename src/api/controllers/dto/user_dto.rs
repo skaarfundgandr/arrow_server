@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserDTO {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_id: Option<i32>,
     pub username: String,
     pub role: Option<RoleDTO>,
     pub created_at: Option<String>,

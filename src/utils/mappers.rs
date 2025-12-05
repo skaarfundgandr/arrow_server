@@ -1,11 +1,11 @@
 use crate::api::controllers::dto::{
-    role_dto::{NewRoleDTO, RoleDTO, UpdateRoleDTO},
+    role_dto::{RoleDTO, UpdateRoleDTO},
     user_dto::{NewUserDTO, UpdateUserDTO},
 };
 use crate::data::models::schema::sql_types::UserRolesPermissionsSet;
 use crate::data::models::user::{NewUser, UpdateUser};
 use crate::data::models::user_roles::{
-    NewUserRole, PermissionString, RolePermissions, UpdateUserRole, UserRole,
+    PermissionString, RolePermissions, UpdateUserRole, UserRole,
 };
 use diesel::deserialize::FromSql;
 use diesel::mysql::{Mysql, MysqlValue};
@@ -32,15 +32,7 @@ impl<'a> From<&'a UpdateUserDTO> for UpdateUser<'a> {
     }
 }
 
-impl<'a> From<&'a NewRoleDTO> for NewUserRole<'a> {
-    fn from(dto: &'a NewRoleDTO) -> Self {
-        NewUserRole {
-            user_id: dto.user_id,
-            name: &dto.name,
-            description: dto.description.as_deref(),
-        }
-    }
-}
+
 
 impl<'a> From<&'a UpdateRoleDTO> for UpdateUserRole<'a> {
     fn from(dto: &'a UpdateRoleDTO) -> Self {
