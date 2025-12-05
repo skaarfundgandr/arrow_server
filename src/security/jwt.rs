@@ -51,7 +51,7 @@ impl JwtService {
         Ok(token?)
     }
 
-    pub async fn validate_token<T: for<'de> Deserialize<'de>>(
+    pub async fn decode_token<T: for<'de> Deserialize<'de>>(
         &self,
         token: &str,
     ) -> Result<T, AuthError> {
