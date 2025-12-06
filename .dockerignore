@@ -1,0 +1,9 @@
+.github
+bruno
+tests
+target
+.vscode
+.idea
+*.md
+.git
+.gitignore
