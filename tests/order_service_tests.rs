@@ -699,18 +699,18 @@ async fn test_order_status_enum() {
     assert_eq!(OrderStatus::Completed.as_str(), "Completed");
     assert_eq!(OrderStatus::Cancelled.as_str(), "Cancelled");
 
-    assert_eq!(OrderStatus::from_str("pending"), Some(OrderStatus::Pending));
+    assert_eq!(OrderStatus::from_str("pending"), Ok(OrderStatus::Pending));
     assert_eq!(
         OrderStatus::from_str("ACCEPTED"),
-        Some(OrderStatus::Accepted)
+        Ok(OrderStatus::Accepted)
     );
     assert_eq!(
         OrderStatus::from_str("Completed"),
-        Some(OrderStatus::Completed)
+        Ok(OrderStatus::Completed)
     );
     assert_eq!(
         OrderStatus::from_str("CANCELLED"),
-        Some(OrderStatus::Cancelled)
+        Ok(OrderStatus::Cancelled)
     );
-    assert_eq!(OrderStatus::from_str("invalid"), None);
+    assert_eq!(OrderStatus::from_str("invalid"), Err(()));
 }
