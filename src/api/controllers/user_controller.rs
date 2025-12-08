@@ -173,6 +173,38 @@ pub async fn login(Json(login_user): Json<LoginDTO>) -> impl IntoResponse {
         (StatusCode::NOT_FOUND, "User not found").into_response()
     }
 }
+/// Refresh JWT token
+pub async fn refresh(claims: AccessClaims) -> impl IntoResponse {
+    let repo = UserRepo::new();
+    let jwt_service = JwtService::new();
+
+    let user_id = claims.sub as i32;
+
+    match repo.get_by_id(user_id).await {
+        Ok(Some(user)) => {
+            let user_dto = user_to_dto(&user, true).await; // Include ID for own profile
+            match jwt_service.generate_token(user_dto).await {
+                Ok(token) => {
+                    let response = LoginResponse {
+                        token,
+                        message: "Token refreshed successfully".to_string(),
+                    };
+                    (StatusCode::OK, Json(response)).into_response()
+                }
+                Err(e) => {
+                    tracing::error!("Error generating token: {:?}", e);
+                    (StatusCode::INTERNAL_SERVER_ERROR, "Token generation failed")
+                        .into_response()
+                }
+            }
+        }
+        Ok(None) => (StatusCode::NOT_FOUND, "User not found").into_response(),
+        Err(e) => {
+            tracing::error!("Error fetching user: {}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch user").into_response()
+        }
+    }
+}
 
 /// Converts a User model to UserDTO, fetching associated role if available
 async fn user_to_dto(user: &User, include_id: bool) -> UserDTO {

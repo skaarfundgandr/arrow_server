@@ -1,0 +1,16 @@
+meta {
+  name: Refresh
+  type: http
+  seq: 3
+}
+
+get {
+  url: 127.0.0.1:3000/api/v1/auth/refresh
+  body: none
+  auth: none
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
