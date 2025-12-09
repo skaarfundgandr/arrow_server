@@ -1,6 +1,5 @@
-use crate::api::controllers::dto::order_dto::{
-    CreateOrderRequest, OrderResponse, UpdateOrderStatusRequest,
-};
+use crate::api::request::{CreateOrderRequest, UpdateOrderStatusRequest};
+use crate::api::response::OrderResponse;
 use crate::data::repos::implementors::user_repo::UserRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::security::jwt::AccessClaims;

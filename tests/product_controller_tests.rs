@@ -1,8 +1,8 @@
-use arrow_server_lib::api::controllers::dto::product_dto::ProductResponse;
 use arrow_server_lib::api::controllers::dto::user_dto::UserDTO;
 use arrow_server_lib::api::controllers::product_controller::{
     create_product, delete_product, get_all_products, get_product_by_id, update_product,
 };
+use arrow_server_lib::api::response::ProductResponse;
 use arrow_server_lib::data::database::Database;
 use arrow_server_lib::data::models::product::NewProduct;
 use arrow_server_lib::data::models::user::NewUser;

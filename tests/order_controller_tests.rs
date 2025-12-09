@@ -1,8 +1,8 @@
-use arrow_server_lib::api::controllers::dto::order_dto::OrderResponse;
 use arrow_server_lib::api::controllers::dto::user_dto::UserDTO;
 use arrow_server_lib::api::controllers::order_controller::{
     create_order, get_all_orders, get_order_by_id, get_user_orders_by_name, update_order_status,
 };
+use arrow_server_lib::api::response::OrderResponse;
 use arrow_server_lib::data::database::Database;
 use arrow_server_lib::data::models::product::NewProduct;
 use arrow_server_lib::data::models::user::NewUser;

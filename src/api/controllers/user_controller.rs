@@ -1,6 +1,7 @@
-use crate::api::controllers::dto::login_dto::{LoginDTO, LoginResponse};
+use crate::api::controllers::dto::login_dto::LoginDTO;
 use crate::api::controllers::dto::role_dto::RoleDTO;
 use crate::api::controllers::dto::user_dto::{NewUserDTO, UpdateUserDTO, UserDTO, UserQueryParams};
+use crate::api::response::LoginResponse;
 use crate::data::models::user::{NewUser, UpdateUser, User};
 use crate::data::models::user_roles::{NewUserRole, RolePermissions};
 use crate::data::repos::implementors::user_repo::UserRepo;

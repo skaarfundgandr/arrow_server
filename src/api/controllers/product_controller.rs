@@ -1,6 +1,5 @@
-use crate::api::controllers::dto::product_dto::{
-    CreateProductRequest, ProductResponse, UpdateProductRequest,
-};
+use crate::api::request::{CreateProductRequest, UpdateProductRequest};
+use crate::api::response::ProductResponse;
 use crate::security::jwt::AccessClaims;
 use crate::services::errors::ProductServiceError;
 use crate::services::product_service::ProductService;
