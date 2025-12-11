@@ -74,3 +74,34 @@ impl std::fmt::Display for ProductServiceError {
         }
     }
 }
+
+#[derive(Debug)]
+pub enum ProductCategoryServiceError {
+    CategoryNotFound,
+    CategoryCreationFailed,
+    CategoryUpdateFailed,
+    CategoryDeletionFailed,
+    PermissionDenied,
+    DatabaseError,
+}
+
+impl std::error::Error for ProductCategoryServiceError {}
+
+impl std::fmt::Display for ProductCategoryServiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProductCategoryServiceError::CategoryNotFound => write!(f, "Category not found"),
+            ProductCategoryServiceError::CategoryCreationFailed => {
+                write!(f, "Category creation failed")
+            }
+            ProductCategoryServiceError::CategoryUpdateFailed => {
+                write!(f, "Category update failed")
+            }
+            ProductCategoryServiceError::CategoryDeletionFailed => {
+                write!(f, "Category deletion failed")
+            }
+            ProductCategoryServiceError::PermissionDenied => write!(f, "Permission denied"),
+            ProductCategoryServiceError::DatabaseError => write!(f, "Database error"),
+        }
+    }
+}
