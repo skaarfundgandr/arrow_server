@@ -13,6 +13,11 @@ use diesel::serialize::{Output, ToSql};
 use diesel::{deserialize, serialize};
 use std::io::Write;
 use std::str::FromStr;
+use crate::api::request::{CreateCategoryRequest, UpdateCategoryRequest};
+use crate::api::response::{OrderResponse, ProductResponse};
+use crate::data::models::categories::{NewCategory, UpdateCategory};
+use crate::data::models::order::Order;
+use crate::data::models::product::{Product};
 
 impl<'a> From<&'a NewUserDTO> for NewUser<'a> {
     fn from(user_dto: &'a NewUserDTO) -> Self {
@@ -111,5 +116,50 @@ impl FromStr for RolePermissions {
             _ => None,
         }
         .ok_or("Unknown permission")
+    }
+}
+
+impl<'a> From<&'a CreateCategoryRequest> for NewCategory<'a> {
+    fn from(request: &'a CreateCategoryRequest) -> Self {
+        NewCategory {
+            name: &request.name,
+            description: request.description.as_deref(),
+        }
+    }
+}
+
+impl<'a> From<&'a UpdateCategoryRequest> for UpdateCategory<'a> {
+    fn from(request: &'a UpdateCategoryRequest) -> Self {
+        UpdateCategory {
+            name: Option::from(request.name.as_deref()),
+            description: request.description.as_deref(),
+        }
+    }
+}
+
+impl From<Order> for OrderResponse {
+    fn from(order: Order) -> Self {
+        Self {
+            order_id: order.order_id,
+            user_id: order.user_id,
+            product_id: order.product_id,
+            quantity: order.quantity,
+            total_amount: order.total_amount,
+            status: order.status,
+            created_at: order.created_at.map(|d| d.to_string()),
+            updated_at: order.updated_at.map(|d| d.to_string()),
+        }
+    }
+}
+
+impl From<Product> for ProductResponse {
+    fn from(product: Product) -> Self {
+        Self {
+            product_id: product.product_id,
+            name: product.name,
+            description: product.description,
+            price: product.price,
+            product_image_uri: product.product_image_uri,
+        }
     }
 }
