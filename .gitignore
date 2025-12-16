@@ -2,3 +2,5 @@
 .idea/
 .env
 compose.yml
+!.env.example
+!.compose.example

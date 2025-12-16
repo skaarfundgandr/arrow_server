@@ -1,0 +1,10 @@
+services:
+  arrow_server:
+    build: .
+    container_name: arrow_server
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=mysql://user:password@db:3306/testdb
+      - JWT_SECRET=your_jwt_secret_key
+      - JWT_EXPIRATION_MINUTES=120

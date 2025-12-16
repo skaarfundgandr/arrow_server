@@ -20,9 +20,10 @@ src/
 │   ├── routes/         # Route definitions (grouped by domain)
 │   ├── controllers/    # HTTP handlers (receive DTOs, return responses)
 │   │   └── dto/        # Request/response data transfer objects
-│   ├── extractors.rs   # Axum extractors
+│   ├── extractors.rs   # Axum extractors (e.g., AccessClaims)
 │   └── errors.rs       # API-specific errors
 ├── services/           # Business logic (auth, validation, hashing)
+├── security/           # Security components (JWT, Auth)
 ├── data/
 │   ├── database.rs     # Connection pool (Lazy static, deadpool)
 │   ├── models/         # Diesel ORM structs (Queryable, Insertable)
@@ -93,6 +94,11 @@ conn.transaction(|connection| {
 - Services (e.g., `AuthService`) are stateless structs.
 - CPU-intensive tasks (like password hashing) should be offloaded using `tokio::task::spawn_blocking`.
 
+### Authentication & Security
+- JWT implementation in `src/security/` using `jsonwebtoken`.
+- `AccessClaims` extractor in `src/api/extractors.rs` handles token validation.
+- Use `JwtService` for token generation and decoding.
+
 ## Commands
 
 ### Build & Run
@@ -100,6 +106,12 @@ conn.transaction(|connection| {
 cargo build                              # Compile
 cargo run                                # Start server on http://127.0.0.1:3000
 DATABASE_URL=mysql://... cargo run       # With explicit DB URL
+```
+
+### Docker Build
+```fish
+docker build -t arrow_server .           # Build using cargo-chef caching
+docker run -p 3000:3000 arrow_server     # Run container
 ```
 
 ### Database Migrations
@@ -129,9 +141,3 @@ cargo test -- --test-threads=1           # Serial execution (use `#[serial_test:
 3. **New repo**: Add trait impl in `implementors/`, wire in `mod.rs`
 4. **New endpoint**: Controller in `api/controllers/`, register route in `api/routes/`
 5. **Wire modules**: Update `mod.rs` files in each directory
-
-## Current TODOs (from codebase)
-- Swagger documentation for API
-- JWT authentication for protected routes
-- Controller trait to reduce duplication
-- Tests for `AuthService` and `UserRepo`
