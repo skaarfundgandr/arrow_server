@@ -10,5 +10,5 @@ pub fn routes() -> Router {
         .route("/{id}", delete(category_controller::delete_category))
         .route("/product", post(category_controller::add_product_to_category))
         .route("/product/remove", post(category_controller::remove_product_from_category))
-        .route("/{id}/products", get(category_controller::get_products_by_category))
+        .route("/{category_name}/products", get(category_controller::get_products_by_category))
 }

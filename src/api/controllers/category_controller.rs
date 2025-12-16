@@ -3,6 +3,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use axum::response::IntoResponse;
 use crate::api::request::{AssignCategoryRequest, CreateCategoryRequest, UpdateCategoryRequest};
+use crate::data::repos::implementors::category_repo::CategoryRepo;
 use crate::security::jwt::AccessClaims;
 use crate::services::errors::ProductCategoryServiceError;
 use crate::services::product_category_service::ProductCategoryService;
@@ -174,14 +175,27 @@ pub async fn remove_product_from_category(
 
 pub async fn get_products_by_category(
     claims: AccessClaims,
-    Path(category_id): Path<i32>,
+    Path(category_name): Path<String>,
 ) -> impl IntoResponse {
     let service = ProductCategoryService::new();
+    let category_repo = CategoryRepo::new();
 
     if claims.roles.is_none() {
         tracing::error!("Roles is none");
         return (StatusCode::FORBIDDEN, "Permission denied").into_response();
     }
+
+    let category_id = match category_repo.get_by_name(&category_name).await {
+        Ok(Some(category)) => category.category_id,
+        Ok(None) => {
+            tracing::error!("Category {} not found", category_name);
+            return (StatusCode::NOT_FOUND, "Category not found").into_response();
+        },
+        Err(_) => {
+            tracing::error!("Failed to get category {}", category_name);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
+        }
+    };
 
     for role in claims.roles.unwrap() {
         match service.get_products_by_category(role as i32, category_id).await {
@@ -200,4 +214,3 @@ pub async fn get_products_by_category(
 }
 
 // TODO: Generate tests and put them in tests/api/controllers/category_controller_tests.rs
-// TODO: Edit ProductResponse to include categories
