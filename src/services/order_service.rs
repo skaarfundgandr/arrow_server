@@ -264,9 +264,9 @@ impl OrderService {
             .get_by_id(role_id)
             .await
             .map_err(|_| OrderServiceError::DatabaseError)?
-            && let Some(perm) = role.permissions.and_then(|p| p.as_permission())
+            && role.get_all_permissions().contains(&required_permission)
         {
-            return Ok(perm == required_permission);
+            return Ok(true);
         }
         Ok(false)
     }
