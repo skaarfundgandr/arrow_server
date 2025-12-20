@@ -25,11 +25,16 @@ impl JwtService {
             .map_err(|_| AuthError::UserNotFound)?
             .ok_or(AuthError::UserNotFound)?;
 
-        let roles: Option<Vec<usize>> = role_repo
-            .get_by_user_id(user.user_id)
+        let roles_vec = role_repo
+            .get_roles_by_user_id(user.user_id)
             .await
-            .map_err(|_| AuthError::UserNotFound)?
-            .map(|role_vec| role_vec.into_iter().map(|r| r.role_id as usize).collect());
+            .map_err(|_| AuthError::UserNotFound)?;
+
+        let roles: Option<Vec<usize>> = if roles_vec.is_empty() {
+            None
+        } else {
+            Some(roles_vec.into_iter().map(|r| r.role_id as usize).collect())
+        };
 
         let claims = AccessClaims {
             sub: user.user_id as usize,

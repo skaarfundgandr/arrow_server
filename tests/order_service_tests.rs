@@ -1,10 +1,10 @@
 use arrow_server_lib::data::database::*;
 use arrow_server_lib::data::models::product::NewProduct;
 use arrow_server_lib::data::models::user::NewUser;
-use arrow_server_lib::data::models::user_roles::{NewUserRole, RolePermissions};
+use arrow_server_lib::data::models::roles::{NewRole, RolePermissions};
 use arrow_server_lib::data::repos::implementors::product_repo::ProductRepo;
 use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
-use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
+use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
 use arrow_server_lib::services::errors::OrderServiceError;
@@ -27,11 +27,13 @@ async fn setup() -> Result<(), result::Error> {
     use arrow_server_lib::data::models::schema::products::dsl::products;
     use arrow_server_lib::data::models::schema::user_roles::dsl::user_roles;
     use arrow_server_lib::data::models::schema::users::dsl::users;
+    use arrow_server_lib::data::models::schema::roles::dsl::roles;
 
     diesel::delete(order_products).execute(&mut conn).await?;
     diesel::delete(orders).execute(&mut conn).await?;
     diesel::delete(products).execute(&mut conn).await?;
     diesel::delete(user_roles).execute(&mut conn).await?;
+    diesel::delete(roles).execute(&mut conn).await?;
     diesel::delete(users).execute(&mut conn).await?;
 
     Ok(())
@@ -60,11 +62,10 @@ async fn create_test_user(username: &str) -> i32 {
         .user_id
 }
 
-async fn create_role_with_permission(user_id: i32, name: &str, permission: RolePermissions) -> i32 {
-    let repo = UserRoleRepo::new();
+async fn create_role_with_permission(name: &str, permission: RolePermissions) -> i32 {
+    let repo = RoleRepo::new();
 
-    let new_role = NewUserRole {
-        user_id,
+    let new_role = NewRole {
         name,
         description: None,
     };
@@ -109,7 +110,7 @@ async fn test_create_order_with_write_permission() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("write_user").await;
-    let role_id = create_role_with_permission(user_id, "writer", RolePermissions::Write).await;
+    let role_id = create_role_with_permission("writer", RolePermissions::Write).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -136,7 +137,7 @@ async fn test_create_order_with_admin_permission() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("admin_user").await;
-    let role_id = create_role_with_permission(user_id, "admin", RolePermissions::Admin).await;
+    let role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -163,7 +164,7 @@ async fn test_create_order_without_permission() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("read_only_user").await;
-    let role_id = create_role_with_permission(user_id, "reader", RolePermissions::Read).await;
+    let role_id = create_role_with_permission("reader", RolePermissions::Read).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -192,7 +193,7 @@ async fn test_get_user_own_orders() {
 
     let user_id = create_test_user("order_viewer").await;
     let write_role_id =
-        create_role_with_permission(user_id, "writer", RolePermissions::Write).await;
+        create_role_with_permission("writer", RolePermissions::Write).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -210,7 +211,7 @@ async fn test_get_user_own_orders() {
         .expect("Failed to create order");
 
     // Create read role for viewing
-    let read_role_id = create_role_with_permission(user_id, "reader", RolePermissions::Read).await;
+    let read_role_id = create_role_with_permission("reader", RolePermissions::Read).await;
 
     // Get own orders
     let orders = service
@@ -228,11 +229,10 @@ async fn test_get_other_user_orders_with_read_permission() {
     setup().await.expect("Setup failed");
 
     let user1_id = create_test_user("user1").await;
-    let user2_id = create_test_user("user2").await;
     let write_role_id =
-        create_role_with_permission(user1_id, "writer1", RolePermissions::Write).await;
+        create_role_with_permission("writer1", RolePermissions::Write).await;
     let read_role_id =
-        create_role_with_permission(user2_id, "reader2", RolePermissions::Read).await;
+        create_role_with_permission("reader2", RolePermissions::Read).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -265,7 +265,7 @@ async fn test_admin_get_all_orders() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("admin_viewer").await;
-    let admin_role_id = create_role_with_permission(user_id, "admin", RolePermissions::Admin).await;
+    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -309,8 +309,8 @@ async fn test_read_permission_get_all_orders() {
 
     let user_id = create_test_user("reader").await;
     let write_role_id =
-        create_role_with_permission(user_id, "writer", RolePermissions::Write).await;
-    let read_role_id = create_role_with_permission(user_id, "reader", RolePermissions::Read).await;
+        create_role_with_permission("writer", RolePermissions::Write).await;
+    let read_role_id = create_role_with_permission("reader", RolePermissions::Read).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -343,8 +343,8 @@ async fn test_cancel_own_pending_order() {
 
     let user_id = create_test_user("canceller").await;
     let write_role_id =
-        create_role_with_permission(user_id, "writer", RolePermissions::Write).await;
-    let admin_role_id = create_role_with_permission(user_id, "admin", RolePermissions::Admin).await;
+        create_role_with_permission("writer", RolePermissions::Write).await;
+    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -390,13 +390,12 @@ async fn test_cancel_other_user_order_denied() {
     setup().await.expect("Setup failed");
 
     let user1_id = create_test_user("owner").await;
-    let user2_id = create_test_user("attacker").await;
     let write_role1_id =
-        create_role_with_permission(user1_id, "writer1", RolePermissions::Write).await;
+        create_role_with_permission("writer1", RolePermissions::Write).await;
     let write_role2_id =
-        create_role_with_permission(user2_id, "writer2", RolePermissions::Write).await;
+        create_role_with_permission("writer2", RolePermissions::Write).await;
     let admin_role_id =
-        create_role_with_permission(user1_id, "admin1", RolePermissions::Admin).await;
+        create_role_with_permission("admin1", RolePermissions::Admin).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -438,8 +437,8 @@ async fn test_write_permission_update_order_status() {
 
     let user_id = create_test_user("status_updater").await;
     let write_role_id =
-        create_role_with_permission(user_id, "writer", RolePermissions::Write).await;
-    let read_role_id = create_role_with_permission(user_id, "reader", RolePermissions::Read).await;
+        create_role_with_permission("writer", RolePermissions::Write).await;
+    let read_role_id = create_role_with_permission("reader", RolePermissions::Read).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -499,8 +498,8 @@ async fn test_non_admin_update_status_denied() {
 
     let user_id = create_test_user("non_admin_updater").await;
     let write_role_id =
-        create_role_with_permission(user_id, "writer", RolePermissions::Write).await;
-    let admin_role_id = create_role_with_permission(user_id, "admin", RolePermissions::Admin).await;
+        create_role_with_permission("writer", RolePermissions::Write).await;
+    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -544,8 +543,8 @@ async fn test_get_orders_by_status() {
 
     let user_id = create_test_user("status_viewer").await;
     let write_role_id =
-        create_role_with_permission(user_id, "writer", RolePermissions::Write).await;
-    let read_role_id = create_role_with_permission(user_id, "reader", RolePermissions::Read).await;
+        create_role_with_permission("writer", RolePermissions::Write).await;
+    let read_role_id = create_role_with_permission("reader", RolePermissions::Read).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -609,7 +608,7 @@ async fn test_delete_order_admin_only() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("admin_deleter").await;
-    let admin_role_id = create_role_with_permission(user_id, "admin", RolePermissions::Admin).await;
+    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -655,8 +654,8 @@ async fn test_delete_order_non_admin_denied() {
 
     let user_id = create_test_user("non_admin_deleter").await;
     let write_role_id =
-        create_role_with_permission(user_id, "writer", RolePermissions::Write).await;
-    let admin_role_id = create_role_with_permission(user_id, "admin", RolePermissions::Admin).await;
+        create_role_with_permission("writer", RolePermissions::Write).await;
+    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();

@@ -3,8 +3,9 @@ use crate::api::controllers::dto::role_dto::RoleDTO;
 use crate::api::controllers::dto::user_dto::{NewUserDTO, UpdateUserDTO, UserDTO, UserQueryParams};
 use crate::api::response::LoginResponse;
 use crate::data::models::user::{NewUser, UpdateUser, User};
-use crate::data::models::user_roles::{NewUserRole, RolePermissions};
+use crate::data::models::roles::{NewRole, RolePermissions};
 use crate::data::repos::implementors::user_repo::UserRepo;
+use crate::data::repos::implementors::role_repo::RoleRepo;
 use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::security::auth::AuthService;
@@ -16,11 +17,10 @@ use axum::response::IntoResponse;
 
 // Helper to check admin permission
 async fn check_is_admin(role_ids: &[usize]) -> bool {
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
     for &id in role_ids {
         if let Ok(Some(role)) = repo.get_by_id(id as i32).await
-            && let Some(perm) = role.get_permissions()
-            && perm == RolePermissions::Admin
+            && role.has_permission(RolePermissions::Admin)
         {
             return true;
         }
@@ -35,7 +35,8 @@ async fn check_is_admin(role_ids: &[usize]) -> bool {
 pub async fn register_user(Json(new_user): Json<NewUserDTO>) -> impl IntoResponse {
     let auth = AuthService::new();
     let user_repo = UserRepo::new();
-    let role_repo = UserRoleRepo::new();
+    let role_repo = RoleRepo::new();
+    let user_role_repo = UserRoleRepo::new();
     let jwt_service = JwtService::new();
 
     // 1. Check if first user
@@ -87,21 +88,35 @@ pub async fn register_user(Json(new_user): Json<NewUserDTO>) -> impl IntoRespons
     // 4. Assign Admin Role if first user
     if is_first_user {
         let role_name = "ADMIN";
-        let new_role = NewUserRole {
-            user_id: user.user_id,
-            name: role_name,
-            description: Some("System Administrator"),
+        
+        let role_result = match role_repo.get_by_name(role_name).await {
+            Ok(Some(r)) => Some(r),
+            Ok(None) => {
+                // Create role
+                let new_role = NewRole {
+                    name: role_name,
+                    description: Some("System Administrator"),
+                };
+                if let Err(e) = role_repo.add(new_role).await {
+                    tracing::error!("Failed to create admin role: {}", e);
+                    None
+                } else {
+                    // Fetch created role and set permissions
+                     match role_repo.get_by_name(role_name).await {
+                        Ok(Some(r)) => {
+                            let _ = role_repo.set_permissions(r.role_id, RolePermissions::Admin).await;
+                            Some(r)
+                        },
+                        _ => None
+                     }
+                }
+            },
+            Err(_) => None,
         };
 
-        if let Err(e) = role_repo.add(new_role).await {
-            tracing::error!("Failed to create admin role: {}", e);
-        } else {
-            // Set permissions
-            if let Ok(Some(role)) = role_repo.get_by_name(role_name).await {
-                let _ = role_repo
-                    .set_permissions(role.role_id, RolePermissions::Admin)
-                    .await;
-            }
+        if let Some(role) = role_result
+            && let Err(e) = user_role_repo.add_user_role(user.user_id, role.role_id).await {
+            tracing::error!("Failed to assign admin role: {}", e);
         }
     }
 
@@ -208,11 +223,12 @@ pub async fn refresh(claims: AccessClaims) -> impl IntoResponse {
 
 /// Converts a User model to UserDTO, fetching associated role if available
 async fn user_to_dto(user: &User, include_id: bool) -> UserDTO {
-    let role_repo = UserRoleRepo::new();
+    let user_role_repo = UserRoleRepo::new();
 
-    let role = match role_repo.get_by_user_id(user.user_id).await {
-        Ok(Some(roles)) if !roles.is_empty() => {
-            Some(RoleDTO::from(roles.into_iter().next().unwrap()))
+    let role = match user_role_repo.get_roles_by_user_id(user.user_id).await {
+        Ok(roles) if !roles.is_empty() => {
+            // We take the first role found. In future, UserDTO might support multiple roles.
+            Some(RoleDTO::from(roles[0].clone()))
         }
         _ => None,
     };

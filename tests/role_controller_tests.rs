@@ -5,8 +5,9 @@ use arrow_server_lib::api::controllers::role_controller::{
 };
 use arrow_server_lib::data::database::Database;
 use arrow_server_lib::data::models::user::NewUser;
-use arrow_server_lib::data::models::user_roles::{NewUserRole, RolePermissions};
+use arrow_server_lib::data::models::roles::{NewRole, RolePermissions};
 use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
+use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
 use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
@@ -33,12 +34,14 @@ async fn setup() -> Result<(), result::Error> {
     use arrow_server_lib::data::models::schema::orders::dsl::orders;
     use arrow_server_lib::data::models::schema::products::dsl::products;
     use arrow_server_lib::data::models::schema::user_roles::dsl::user_roles;
+    use arrow_server_lib::data::models::schema::roles::dsl::roles;
     use arrow_server_lib::data::models::schema::users::dsl::users;
 
     diesel::delete(order_products).execute(&mut conn).await?;
     diesel::delete(orders).execute(&mut conn).await?;
     diesel::delete(products).execute(&mut conn).await?;
     diesel::delete(user_roles).execute(&mut conn).await?;
+    diesel::delete(roles).execute(&mut conn).await?;
     diesel::delete(users).execute(&mut conn).await?;
 
     Ok(())
@@ -71,12 +74,12 @@ async fn create_test_user(username: &str) -> i32 {
 async fn create_admin_user(username: &str) -> (i32, String) {
     let user_id = create_test_user(username).await;
 
-    let role_repo = UserRoleRepo::new();
+    let role_repo = RoleRepo::new();
+    let user_role_repo = UserRoleRepo::new();
     let jwt_service = JwtService::new();
 
     // Create admin role
-    let new_role = NewUserRole {
-        user_id,
+    let new_role = NewRole {
         name: "ADMIN",
         description: Some("Test Admin"),
     };
@@ -85,12 +88,13 @@ async fn create_admin_user(username: &str) -> (i32, String) {
         .await
         .expect("Failed to create role");
 
+    // Get the role to have ID
+    let role = role_repo.get_by_name("ADMIN").await.unwrap().unwrap();
+
+    // Assign to user
+    user_role_repo.add_user_role(user_id, role.role_id).await.expect("Failed to assign");
+
     // Set admin permission
-    let role = role_repo
-        .get_by_name("ADMIN")
-        .await
-        .expect("Query failed")
-        .expect("Role not found");
     role_repo
         .set_permissions(role.role_id, RolePermissions::Admin)
         .await
@@ -116,13 +120,13 @@ async fn create_admin_user(username: &str) -> (i32, String) {
 async fn create_regular_user(username: &str) -> (i32, String) {
     let user_id = create_test_user(username).await;
 
-    let role_repo = UserRoleRepo::new();
+    let role_repo = RoleRepo::new();
+    let user_role_repo = UserRoleRepo::new();
     let jwt_service = JwtService::new();
 
     // Create regular role with READ permission
     let role_name = format!("{}_role", username);
-    let new_role = NewUserRole {
-        user_id,
+    let new_role = NewRole {
         name: &role_name,
         description: Some("Regular User"),
     };
@@ -130,13 +134,11 @@ async fn create_regular_user(username: &str) -> (i32, String) {
         .add(new_role)
         .await
         .expect("Failed to create role");
+    
+    let role = role_repo.get_by_name(&role_name).await.unwrap().unwrap();
+    user_role_repo.add_user_role(user_id, role.role_id).await.expect("Failed to assign");
 
     // Set READ permission (non-admin)
-    let role = role_repo
-        .get_by_name(&role_name)
-        .await
-        .expect("Query failed")
-        .expect("Role not found");
     role_repo
         .set_permissions(role.role_id, RolePermissions::Read)
         .await
@@ -158,11 +160,10 @@ async fn create_regular_user(username: &str) -> (i32, String) {
     (user_id, token)
 }
 
-async fn create_test_role(user_id: i32, name: &str) -> i32 {
-    let repo = UserRoleRepo::new();
+async fn create_test_role(name: &str) -> i32 {
+    let repo = RoleRepo::new();
 
-    let new_role = NewUserRole {
-        user_id,
+    let new_role = NewRole {
         name,
         description: Some("Test role"),
     };
@@ -223,9 +224,9 @@ async fn test_get_all_roles_empty() {
 async fn test_get_all_roles_with_data() {
     setup().await.expect("Setup failed");
 
-    let (user_id, token) = create_admin_user("admin").await;
-    let _ = create_test_role(user_id, "admin_role").await;
-    let _ = create_test_role(user_id, "user_role").await;
+    let (_, token) = create_admin_user("admin").await;
+    let _ = create_test_role("admin_role").await;
+    let _ = create_test_role("user_role").await;
 
     let app = app();
 
@@ -297,7 +298,7 @@ async fn test_create_role_success() {
     setup().await.expect("Setup failed");
 
     let (_, token) = create_admin_user("admin").await;
-    let _ = create_test_user("create_role_user").await;
+    // user creation for role is no longer needed/relevant for create_role
 
     let app = app();
 
@@ -310,7 +311,7 @@ async fn test_create_role_success() {
                 .header("Authorization", format!("Bearer {}", token))
                 .body(Body::from(
                     serde_json::to_vec(&json!({
-                        "username": "create_role_user",
+                        "username": "ignored", // Field present in DTO but ignored
                         "name": "new_role",
                         "description": "A new test role"
                     }))
@@ -324,7 +325,7 @@ async fn test_create_role_success() {
     assert_eq!(response.status(), StatusCode::CREATED);
 
     // Verify creation
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
     let role = repo
         .get_by_name("new_role")
         .await
@@ -335,43 +336,11 @@ async fn test_create_role_success() {
 
 #[tokio::test]
 #[serial_test::serial]
-async fn test_create_role_user_not_found() {
-    setup().await.expect("Setup failed");
-
-    let (_, token) = create_admin_user("admin").await;
-
-    let app = app();
-
-    let response = app
-        .oneshot(
-            Request::builder()
-                .method("POST")
-                .uri("/roles")
-                .header("content-type", "application/json")
-                .header("Authorization", format!("Bearer {}", token))
-                .body(Body::from(
-                    serde_json::to_vec(&json!({
-                        "username": "nonexistent_user",
-                        "name": "invalid_role",
-                        "description": null
-                    }))
-                    .unwrap(),
-                ))
-                .unwrap(),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-#[serial_test::serial]
 async fn test_get_role_by_name() {
     setup().await.expect("Setup failed");
 
-    let (user_id, token) = create_admin_user("admin").await;
-    let _ = create_test_role(user_id, "test_role").await;
+    let (_, token) = create_admin_user("admin").await;
+    let _ = create_test_role("test_role").await;
 
     let app = app();
 
@@ -421,8 +390,8 @@ async fn test_get_role_by_name_not_found() {
 async fn test_update_role() {
     setup().await.expect("Setup failed");
 
-    let (user_id, token) = create_admin_user("admin").await;
-    let role_id = create_test_role(user_id, "update_test_role").await;
+    let (_, token) = create_admin_user("admin").await;
+    let role_id = create_test_role("update_test_role").await;
 
     let app = app();
 
@@ -448,7 +417,7 @@ async fn test_update_role() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Verify update
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
     let role = repo
         .get_by_id(role_id)
         .await
@@ -493,8 +462,8 @@ async fn test_update_role_not_found() {
 async fn test_delete_role() {
     setup().await.expect("Setup failed");
 
-    let (user_id, token) = create_admin_user("admin").await;
-    let role_id = create_test_role(user_id, "delete_test_role").await;
+    let (_, token) = create_admin_user("admin").await;
+    let role_id = create_test_role("delete_test_role").await;
 
     let app = app();
 
@@ -513,7 +482,7 @@ async fn test_delete_role() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Verify deletion
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
     let deleted = repo.get_by_id(role_id).await.expect("Query failed");
     assert!(deleted.is_none());
 }
@@ -547,8 +516,8 @@ async fn test_delete_role_not_found() {
 async fn test_set_permission() {
     setup().await.expect("Setup failed");
 
-    let (user_id, token) = create_admin_user("admin").await;
-    let role_id = create_test_role(user_id, "perm_test_role").await;
+    let (_, token) = create_admin_user("admin").await;
+    let role_id = create_test_role("perm_test_role").await;
 
     let app = app();
 
@@ -573,7 +542,7 @@ async fn test_set_permission() {
     assert_eq!(response.status(), StatusCode::OK);
 
     // Verify permission set
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
     let role = repo
         .get_by_id(role_id)
         .await
@@ -588,8 +557,8 @@ async fn test_set_permission() {
 async fn test_set_permission_invalid() {
     setup().await.expect("Setup failed");
 
-    let (user_id, token) = create_admin_user("admin").await;
-    let role_id = create_test_role(user_id, "invalid_perm_role").await;
+    let (_, token) = create_admin_user("admin").await;
+    let role_id = create_test_role("invalid_perm_role").await;
 
     let app = app();
 
@@ -650,7 +619,8 @@ async fn test_assign_role_to_user() {
     setup().await.expect("Setup failed");
 
     let (_, token) = create_admin_user("admin").await;
-    let _ = create_test_user("assign_user").await;
+    let user_id = create_test_user("assign_user").await;
+    let _ = create_test_role("assigned_role").await;
 
     let app = app();
 
@@ -677,12 +647,13 @@ async fn test_assign_role_to_user() {
 
     // Verify role was assigned
     let repo = UserRoleRepo::new();
-    let role = repo
-        .get_by_name("assigned_role")
+    let roles = repo
+        .get_roles_by_user_id(user_id)
         .await
-        .expect("Query failed")
-        .expect("Role not found");
-    assert_eq!(role.name, "assigned_role");
+        .expect("Query failed");
+    
+    let has_role = roles.iter().any(|r| r.name == "assigned_role");
+    assert!(has_role);
 }
 
 #[tokio::test]
@@ -721,10 +692,10 @@ async fn test_assign_role_user_not_found() {
 async fn test_set_all_permission_types() {
     setup().await.expect("Setup failed");
 
-    let (user_id, token) = create_admin_user("admin").await;
-    let role_id = create_test_role(user_id, "all_perms_role").await;
+    let (_, token) = create_admin_user("admin").await;
+    let role_id = create_test_role("all_perms_role").await;
 
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
 
     for perm in ["READ", "WRITE", "DELETE", "ADMIN"] {
         let app = app();

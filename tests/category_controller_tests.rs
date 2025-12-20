@@ -8,11 +8,12 @@ use arrow_server_lib::data::database::Database;
 use arrow_server_lib::data::models::categories::NewCategory;
 use arrow_server_lib::data::models::product::NewProduct;
 use arrow_server_lib::data::models::user::NewUser;
-use arrow_server_lib::data::models::user_roles::{NewUserRole, RolePermissions};
+use arrow_server_lib::data::models::roles::{NewRole, RolePermissions};
 use arrow_server_lib::data::repos::implementors::category_repo::CategoryRepo;
 use arrow_server_lib::data::repos::implementors::product_category_repo::ProductCategoryRepo;
 use arrow_server_lib::data::repos::implementors::product_repo::ProductRepo;
 use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
+use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
 use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
@@ -43,6 +44,7 @@ async fn setup() -> Result<(), result::Error> {
     use arrow_server_lib::data::models::schema::product_categories::dsl::product_categories;
     use arrow_server_lib::data::models::schema::products::dsl::products;
     use arrow_server_lib::data::models::schema::user_roles::dsl::user_roles;
+    use arrow_server_lib::data::models::schema::roles::dsl::roles;
     use arrow_server_lib::data::models::schema::users::dsl::users;
 
     diesel::delete(order_products).execute(&mut conn).await?;
@@ -53,6 +55,7 @@ async fn setup() -> Result<(), result::Error> {
     diesel::delete(products).execute(&mut conn).await?;
     diesel::delete(categories).execute(&mut conn).await?;
     diesel::delete(user_roles).execute(&mut conn).await?;
+    diesel::delete(roles).execute(&mut conn).await?;
     diesel::delete(users).execute(&mut conn).await?;
 
     Ok(())
@@ -86,11 +89,11 @@ async fn create_user_with_role(
 ) -> (i32, String) {
     let user_id = create_test_user(username, password).await;
 
-    let role_repo = UserRoleRepo::new();
+    let role_repo = RoleRepo::new();
+    let user_role_repo = UserRoleRepo::new();
     let jwt_service = JwtService::new();
 
-    let new_role = NewUserRole {
-        user_id,
+    let new_role = NewRole {
         name: role_name,
         description: Some("Test Role"),
     };
@@ -104,6 +107,9 @@ async fn create_user_with_role(
         .await
         .expect("Query failed")
         .expect("Role not found");
+        
+    user_role_repo.add_user_role(user_id, role.role_id).await.expect("Failed to assign role");
+
     role_repo
         .set_permissions(role.role_id, permission)
         .await

@@ -7,10 +7,10 @@ use crate::api::response::{CategoryResponse, OrderResponse, ProductResponse};
 use crate::data::models::categories::{Category, NewCategory, UpdateCategory};
 use crate::data::models::order::Order;
 use crate::data::models::product::Product;
-use crate::data::models::schema::sql_types::UserRolesPermissionsSet;
+use crate::data::models::schema::sql_types::RolesPermissionsSet;
 use crate::data::models::user::{NewUser, UpdateUser};
-use crate::data::models::user_roles::{
-    PermissionString, RolePermissions, UpdateUserRole, UserRole,
+use crate::data::models::roles::{
+    PermissionString, RolePermissions, UpdateRole, Role,
 };
 use diesel::deserialize::FromSql;
 use diesel::mysql::{Mysql, MysqlValue};
@@ -37,10 +37,9 @@ impl<'a> From<&'a UpdateUserDTO> for UpdateUser<'a> {
     }
 }
 
-impl<'a> From<&'a UpdateRoleDTO> for UpdateUserRole<'a> {
+impl<'a> From<&'a UpdateRoleDTO> for UpdateRole<'a> {
     fn from(dto: &'a UpdateRoleDTO) -> Self {
-        UpdateUserRole {
-            user_id: None,
+        UpdateRole {
             name: dto.name.as_deref(),
             description: dto.description.as_deref(),
         }
@@ -53,14 +52,14 @@ impl From<RolePermissions> for PermissionString {
     }
 }
 
-impl ToSql<UserRolesPermissionsSet, Mysql> for PermissionString {
+impl ToSql<RolesPermissionsSet, Mysql> for PermissionString {
     fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Mysql>) -> serialize::Result {
         out.write_all(self.0.as_bytes())?;
         Ok(serialize::IsNull::No)
     }
 }
 
-impl FromSql<UserRolesPermissionsSet, Mysql> for PermissionString {
+impl FromSql<RolesPermissionsSet, Mysql> for PermissionString {
     fn from_sql(bytes: MysqlValue<'_>) -> deserialize::Result<Self> {
         Ok(PermissionString(String::from_utf8(
             bytes.as_bytes().to_vec(),
@@ -68,8 +67,8 @@ impl FromSql<UserRolesPermissionsSet, Mysql> for PermissionString {
     }
 }
 
-impl From<UserRole> for RoleDTO {
-    fn from(user_role: UserRole) -> Self {
+impl From<Role> for RoleDTO {
+    fn from(user_role: Role) -> Self {
         let permissions = user_role
             .get_all_permissions()
             .into_iter()

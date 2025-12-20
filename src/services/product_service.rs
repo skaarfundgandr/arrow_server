@@ -1,9 +1,8 @@
 use crate::api::response::{CategoryResponse, ProductResponse};
 use crate::data::models::product::{NewProduct, UpdateProduct};
-use crate::data::models::user_roles::RolePermissions;
+use crate::data::models::roles::RolePermissions;
 use crate::data::repos::implementors::product_category_repo::ProductCategoryRepo;
 use crate::data::repos::implementors::product_repo::ProductRepo;
-use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::services::errors::ProductServiceError;
 use bigdecimal::BigDecimal;
@@ -260,14 +259,14 @@ impl ProductService {
         role_id: i32,
         required_permission: RolePermissions,
     ) -> Result<bool, ProductServiceError> {
-        let role_repo = UserRoleRepo::new();
+        use crate::data::repos::implementors::role_repo::RoleRepo;
+        let role_repo = RoleRepo::new();
         if let Some(role) = role_repo
             .get_by_id(role_id)
             .await
             .map_err(|_| ProductServiceError::DatabaseError)?
-            && role.get_all_permissions().contains(&required_permission)
         {
-            return Ok(true);
+            return Ok(role.has_permission(required_permission));
         }
         Ok(false)
     }

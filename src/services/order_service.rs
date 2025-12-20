@@ -1,7 +1,6 @@
 use crate::data::models::order::{NewOrder, Order, UpdateOrder};
-use crate::data::models::user_roles::RolePermissions;
+use crate::data::models::roles::RolePermissions;
 use crate::data::repos::implementors::order_repo::OrderRepo;
-use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::services::errors::OrderServiceError;
 use bigdecimal::BigDecimal;
@@ -259,14 +258,14 @@ impl OrderService {
         role_id: i32,
         required_permission: RolePermissions,
     ) -> Result<bool, OrderServiceError> {
-        let role_repo = UserRoleRepo::new();
+        use crate::data::repos::implementors::role_repo::RoleRepo;
+        let role_repo = RoleRepo::new();
         if let Some(role) = role_repo
             .get_by_id(role_id)
             .await
             .map_err(|_| OrderServiceError::DatabaseError)?
-            && role.get_all_permissions().contains(&required_permission)
         {
-            return Ok(true);
+            return Ok(role.has_permission(required_permission));
         }
         Ok(false)
     }

@@ -2,11 +2,10 @@ use crate::api::request::{AssignCategoryRequest, CreateCategoryRequest, UpdateCa
 use crate::api::response::{CategoryResponse, ProductResponse};
 use crate::data::models::categories::{NewCategory, UpdateCategory};
 use crate::data::models::product_category::NewProductCategory;
-use crate::data::models::user_roles::RolePermissions;
+use crate::data::models::roles::RolePermissions;
 use crate::data::repos::implementors::category_repo::CategoryRepo;
 use crate::data::repos::implementors::product_category_repo::ProductCategoryRepo;
 use crate::data::repos::implementors::product_repo::ProductRepo;
-use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::services::errors::ProductCategoryServiceError;
 use diesel::result::{DatabaseErrorKind, Error};
@@ -318,14 +317,14 @@ impl ProductCategoryService {
         role_id: i32,
         required_permission: RolePermissions,
     ) -> Result<bool, ProductCategoryServiceError> {
-        let role_repo = UserRoleRepo::new();
+        use crate::data::repos::implementors::role_repo::RoleRepo;
+        let role_repo = RoleRepo::new();
         if let Some(role) = role_repo
             .get_by_id(role_id)
             .await
             .map_err(|_| ProductCategoryServiceError::DatabaseError)?
-            && role.get_all_permissions().contains(&required_permission)
         {
-            return Ok(true);
+            return Ok(role.has_permission(required_permission));
         }
         Ok(false)
     }

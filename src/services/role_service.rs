@@ -1,4 +1,4 @@
-use crate::data::models::user_roles::*;
+use crate::data::models::roles::*;
 use crate::data::repos::traits::repository::Repository;
 use crate::services::errors::RoleError;
 
@@ -22,9 +22,9 @@ impl RoleService {
         role_id: i32,
         required_permission: RolePermissions,
     ) -> Result<bool, RoleError> {
-        use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
+        use crate::data::repos::implementors::role_repo::RoleRepo;
 
-        let repo = UserRoleRepo::new();
+        let repo = RoleRepo::new();
         if let Some(role) = repo
             .get_by_id(role_id)
             .await
@@ -44,21 +44,19 @@ impl RoleService {
         user_id: i32,
         role_name: &str,
     ) -> Result<(), RoleError> {
+        use crate::data::repos::implementors::role_repo::RoleRepo;
         use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
 
-        let repo = UserRoleRepo::new();
-        let role = repo
+        let role_repo = RoleRepo::new();
+        let user_role_repo = UserRoleRepo::new();
+        
+        let role = role_repo
             .get_by_name(role_name)
             .await
             .map_err(|_| RoleError::RoleNotFound)?;
 
         if let Some(role) = role {
-            let new_user_role = NewUserRole {
-                user_id,
-                name: role.name.as_str(),
-                description: role.description.as_deref(),
-            };
-            repo.add(new_user_role)
+            user_role_repo.add_user_role(user_id, role.role_id)
                 .await
                 .map_err(|_| RoleError::RoleAssignmentFailed)?;
             Ok(())
@@ -73,11 +71,10 @@ impl RoleService {
         description: Option<&str>,
         permissions: RolePermissions,
     ) -> Result<(), RoleError> {
-        use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
+        use crate::data::repos::implementors::role_repo::RoleRepo;
 
-        let repo = UserRoleRepo::new();
-        let new_role = NewUserRole {
-            user_id: 0, // System role, not assigned to a user yet
+        let repo = RoleRepo::new();
+        let new_role = NewRole {
             name,
             description,
         };
@@ -104,9 +101,9 @@ impl RoleService {
         role_name: &str,
         permission: RolePermissions,
     ) -> Result<(), RoleError> {
-        use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
+        use crate::data::repos::implementors::role_repo::RoleRepo;
 
-        let repo = UserRoleRepo::new();
+        let repo = RoleRepo::new();
 
         let role = match repo
             .get_by_name(role_name)
@@ -127,9 +124,9 @@ impl RoleService {
         role_name: &str,
         permission: RolePermissions,
     ) -> Result<(), RoleError> {
-        use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
+        use crate::data::repos::implementors::role_repo::RoleRepo;
 
-        let repo = UserRoleRepo::new();
+        let repo = RoleRepo::new();
         let role = match repo
             .get_by_name(role_name)
             .await

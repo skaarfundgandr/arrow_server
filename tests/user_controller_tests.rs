@@ -5,8 +5,9 @@ use arrow_server_lib::api::controllers::user_controller::{
 };
 use arrow_server_lib::data::database::Database;
 use arrow_server_lib::data::models::user::NewUser;
-use arrow_server_lib::data::models::user_roles::{NewUserRole, RolePermissions};
+use arrow_server_lib::data::models::roles::{NewRole, RolePermissions};
 use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
+use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
 use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
@@ -33,12 +34,14 @@ async fn setup() -> Result<(), result::Error> {
     use arrow_server_lib::data::models::schema::orders::dsl::orders;
     use arrow_server_lib::data::models::schema::products::dsl::products;
     use arrow_server_lib::data::models::schema::user_roles::dsl::user_roles;
+    use arrow_server_lib::data::models::schema::roles::dsl::roles;
     use arrow_server_lib::data::models::schema::users::dsl::users;
 
     diesel::delete(order_products).execute(&mut conn).await?;
     diesel::delete(orders).execute(&mut conn).await?;
     diesel::delete(products).execute(&mut conn).await?;
     diesel::delete(user_roles).execute(&mut conn).await?;
+    diesel::delete(roles).execute(&mut conn).await?;
     diesel::delete(users).execute(&mut conn).await?;
 
     Ok(())
@@ -68,12 +71,12 @@ async fn create_test_user(username: &str, password: &str) -> i32 {
 async fn create_admin_user(username: &str, password: &str) -> (i32, String) {
     let user_id = create_test_user(username, password).await;
 
-    let role_repo = UserRoleRepo::new();
+    let role_repo = RoleRepo::new();
+    let user_role_repo = UserRoleRepo::new();
     let jwt_service = JwtService::new();
 
     // Create admin role
-    let new_role = NewUserRole {
-        user_id,
+    let new_role = NewRole {
         name: "ADMIN",
         description: Some("Test Admin"),
     };
@@ -82,12 +85,15 @@ async fn create_admin_user(username: &str, password: &str) -> (i32, String) {
         .await
         .expect("Failed to create role");
 
-    // Set admin permission
+    // Assign and Set admin permission
     let role = role_repo
         .get_by_name("ADMIN")
         .await
         .expect("Query failed")
         .expect("Role not found");
+    
+    user_role_repo.add_user_role(user_id, role.role_id).await.expect("Failed to assign");
+
     role_repo
         .set_permissions(role.role_id, RolePermissions::Admin)
         .await
@@ -113,12 +119,12 @@ async fn create_admin_user(username: &str, password: &str) -> (i32, String) {
 async fn create_regular_user(username: &str, password: &str) -> (i32, String) {
     let user_id = create_test_user(username, password).await;
 
-    let role_repo = UserRoleRepo::new();
+    let role_repo = RoleRepo::new();
+    let user_role_repo = UserRoleRepo::new();
     let jwt_service = JwtService::new();
 
     // Create regular role with READ permission
-    let new_role = NewUserRole {
-        user_id,
+    let new_role = NewRole {
         name: "USER",
         description: Some("Regular User"),
     };
@@ -126,13 +132,16 @@ async fn create_regular_user(username: &str, password: &str) -> (i32, String) {
         .add(new_role)
         .await
         .expect("Failed to create role");
-
-    // Set READ permission (non-admin)
+    
     let role = role_repo
         .get_by_name("USER")
         .await
         .expect("Query failed")
         .expect("Role not found");
+    
+    user_role_repo.add_user_role(user_id, role.role_id).await.expect("Failed to assign");
+
+    // Set READ permission (non-admin)
     role_repo
         .set_permissions(role.role_id, RolePermissions::Read)
         .await

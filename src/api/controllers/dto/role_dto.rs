@@ -11,7 +11,6 @@ pub struct RoleDTO {
 }
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct NewRoleDTO {
-    pub username: String,
     pub name: String,
     pub description: Option<String>,
 }

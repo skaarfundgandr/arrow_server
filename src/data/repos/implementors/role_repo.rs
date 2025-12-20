@@ -1,5 +1,5 @@
 use crate::data::database::Database;
-use crate::data::models::order::{NewOrder, Order, UpdateOrder};
+use crate::data::models::roles::{NewRole, Role, UpdateRole};
 use crate::data::repos::traits::repository::Repository;
 use async_trait::async_trait;
 use diesel::prelude::*;
@@ -8,19 +8,15 @@ use diesel_async::pooled_connection::deadpool::Object;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, AsyncMysqlConnection, RunQueryDsl};
 
-pub struct OrderRepo {}
+pub struct RoleRepo {}
 
-impl OrderRepo {
+impl RoleRepo {
     pub fn new() -> Self {
-        OrderRepo {}
+        RoleRepo {}
     }
 
-    /// Retrieves all orders for a specific user by user_id.
-    pub async fn get_by_user_id(
-        &self,
-        user_id_query: i32,
-    ) -> Result<Option<Vec<Order>>, result::Error> {
-        use crate::data::models::schema::orders::dsl::{orders, user_id};
+    pub async fn get_by_name(&self, name_val: &str) -> Result<Option<Role>, result::Error> {
+        use crate::data::models::schema::roles::dsl::{name, roles};
 
         let db = Database::new().await;
 
@@ -31,24 +27,20 @@ impl OrderRepo {
             )
         })?;
 
-        match orders
-            .filter(user_id.eq(user_id_query))
-            .load::<Order>(&mut conn)
-            .await
-        {
-            Ok(value) if value.is_empty() => Ok(None),
+        match roles.filter(name.eq(name_val)).first::<Role>(&mut conn).await {
             Ok(value) => Ok(Some(value)),
             Err(result::Error::NotFound) => Ok(None),
             Err(e) => Err(e),
         }
     }
 
-    /// Retrieves all orders with a specific status.
-    pub async fn get_by_status(
+    pub async fn set_permissions(
         &self,
-        status_query: &str,
-    ) -> Result<Option<Vec<Order>>, result::Error> {
-        use crate::data::models::schema::orders::dsl::{orders, status};
+        id: i32,
+        perm: crate::data::models::roles::RolePermissions,
+    ) -> Result<(), result::Error> {
+        use diesel::sql_query;
+        use diesel::sql_types::{Integer, Text};
 
         let db = Database::new().await;
 
@@ -59,31 +51,47 @@ impl OrderRepo {
             )
         })?;
 
-        match orders
-            .filter(status.eq(status_query))
-            .load::<Order>(&mut conn)
-            .await
-        {
-            Ok(value) if value.is_empty() => Ok(None),
-            Ok(value) => Ok(Some(value)),
-            Err(result::Error::NotFound) => Ok(None),
-            Err(e) => Err(e),
-        }
+        conn.transaction(|connection| {
+            async move {
+                sql_query("UPDATE roles SET permissions = ? WHERE role_id = ?")
+                    .bind::<Text, _>(perm.as_str())
+                    .bind::<Integer, _>(id)
+                    .execute(connection)
+                    .await?;
+                Ok(())
+            }
+            .scope_boxed()
+        })
+        .await
     }
 
-    /// Retrieves all orders for users with a specific role name.
-    pub async fn get_orders_by_role_name(
+    pub async fn add_permission(
         &self,
-        role: &str,
-    ) -> Result<Option<Vec<Order>>, result::Error> {
-        use crate::data::models::schema::orders::dsl::{orders, user_id};
-        use crate::data::models::schema::user_roles::dsl::{
-            user_id as role_user_id, user_roles,
-        };
-        use crate::data::models::schema::roles::dsl::{
-            roles, name as role_name
+        id: i32,
+        perm: crate::data::models::roles::RolePermissions,
+    ) -> Result<(), result::Error> {
+        use diesel::sql_query;
+        use diesel::sql_types::{Integer, Text};
+
+        let role = self.get_by_id(id).await?;
+        let role = match role {
+            Some(r) => r,
+            None => return Err(result::Error::NotFound),
         };
 
+        if role.has_permission(perm) {
+            return Ok(());
+        }
+
+        let mut perms = role.get_all_permissions();
+        perms.push(perm);
+
+        let perm_str = perms
+            .iter()
+            .map(|p| p.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
+
         let db = Database::new().await;
 
         let mut conn: Object<AsyncMysqlConnection> = db.get_connection().await.map_err(|e| {
@@ -93,41 +101,30 @@ impl OrderRepo {
             )
         })?;
 
-        // Find user_ids with the given role
-        // user_roles belongs_to roles
-        let user_ids = user_roles
-            .inner_join(roles)
-            .filter(role_name.eq(role))
-            .select(role_user_id)
-            .load::<i32>(&mut conn)
-            .await?;
-
-        if user_ids.is_empty() {
-            return Ok(None);
-        }
-
-        match orders
-            .filter(user_id.eq_any(user_ids))
-            .load::<Order>(&mut conn)
-            .await
-        {
-            Ok(value) if value.is_empty() => Ok(None),
-            Ok(value) => Ok(Some(value)),
-            Err(result::Error::NotFound) => Ok(None),
-            Err(e) => Err(e),
-        }
+        conn.transaction(|connection| {
+            async move {
+                sql_query("UPDATE roles SET permissions = ? WHERE role_id = ?")
+                    .bind::<Text, _>(perm_str)
+                    .bind::<Integer, _>(id)
+                    .execute(connection)
+                    .await?;
+                Ok(())
+            }
+            .scope_boxed()
+        })
+        .await
     }
 }
 
 #[async_trait]
-impl Repository for OrderRepo {
+impl Repository for RoleRepo {
     type Id = i32;
-    type Item = Order;
-    type NewItem<'a> = NewOrder;
-    type UpdateForm<'a> = UpdateOrder<'a>;
+    type Item = Role;
+    type NewItem<'a> = NewRole<'a>;
+    type UpdateForm<'a> = UpdateRole<'a>;
 
     async fn get_all(&self) -> Result<Option<Vec<Self::Item>>, result::Error> {
-        use crate::data::models::schema::orders::dsl::orders;
+        use crate::data::models::schema::roles::dsl::roles;
 
         let db = Database::new().await;
 
@@ -138,7 +135,7 @@ impl Repository for OrderRepo {
             )
         })?;
 
-        match orders.load::<Self::Item>(&mut conn).await {
+        match roles.load::<Self::Item>(&mut conn).await {
             Ok(value) if value.is_empty() => Ok(None),
             Ok(value) => Ok(Some(value)),
             Err(result::Error::NotFound) => Ok(None),
@@ -147,7 +144,7 @@ impl Repository for OrderRepo {
     }
 
     async fn get_by_id(&self, id: Self::Id) -> Result<Option<Self::Item>, result::Error> {
-        use crate::data::models::schema::orders::dsl::{order_id, orders};
+        use crate::data::models::schema::roles::dsl::{role_id, roles};
 
         let db = Database::new().await;
 
@@ -158,11 +155,7 @@ impl Repository for OrderRepo {
             )
         })?;
 
-        match orders
-            .filter(order_id.eq(id))
-            .first::<Self::Item>(&mut conn)
-            .await
-        {
+        match roles.filter(role_id.eq(id)).first::<Self::Item>(&mut conn).await {
             Ok(value) => Ok(Some(value)),
             Err(result::Error::NotFound) => Ok(None),
             Err(e) => Err(e),
@@ -170,7 +163,7 @@ impl Repository for OrderRepo {
     }
 
     async fn add<'a>(&self, item: Self::NewItem<'a>) -> Result<(), result::Error> {
-        use crate::data::models::schema::orders::dsl::orders;
+        use crate::data::models::schema::roles::dsl::roles;
 
         let db = Database::new().await;
 
@@ -184,7 +177,7 @@ impl Repository for OrderRepo {
         match conn
             .transaction(|connection| {
                 async move {
-                    diesel::insert_into(orders)
+                    diesel::insert_into(roles)
                         .values(&item)
                         .execute(connection)
                         .await?;
@@ -204,7 +197,7 @@ impl Repository for OrderRepo {
         id: Self::Id,
         item: Self::UpdateForm<'a>,
     ) -> Result<(), result::Error> {
-        use crate::data::models::schema::orders::dsl::{order_id, orders};
+        use crate::data::models::schema::roles::dsl::{role_id, roles};
 
         let db = Database::new().await;
 
@@ -218,7 +211,7 @@ impl Repository for OrderRepo {
         match conn
             .transaction(|connection| {
                 async move {
-                    diesel::update(orders.filter(order_id.eq(id)))
+                    diesel::update(roles.filter(role_id.eq(id)))
                         .set(&item)
                         .execute(connection)
                         .await?;
@@ -234,7 +227,7 @@ impl Repository for OrderRepo {
     }
 
     async fn delete(&self, id: Self::Id) -> Result<(), result::Error> {
-        use crate::data::models::schema::orders::dsl::{order_id, orders};
+        use crate::data::models::schema::roles::dsl::{role_id, roles};
 
         let db = Database::new().await;
 
@@ -248,7 +241,7 @@ impl Repository for OrderRepo {
         match conn
             .transaction(|connection| {
                 async move {
-                    diesel::delete(orders.filter(order_id.eq(id)))
+                    diesel::delete(roles.filter(role_id.eq(id)))
                         .execute(connection)
                         .await?;
                     Ok(())
@@ -263,7 +256,7 @@ impl Repository for OrderRepo {
     }
 }
 
-impl Default for OrderRepo {
+impl Default for RoleRepo {
     fn default() -> Self {
         Self::new()
     }

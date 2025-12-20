@@ -2,11 +2,11 @@ use arrow_server_lib::data::database::*;
 use arrow_server_lib::data::models::categories::NewCategory;
 use arrow_server_lib::data::models::product_category::NewProductCategory;
 use arrow_server_lib::data::models::user::NewUser;
-use arrow_server_lib::data::models::user_roles::{NewUserRole, RolePermissions};
+use arrow_server_lib::data::models::roles::{NewRole, RolePermissions};
 use arrow_server_lib::data::repos::implementors::category_repo::CategoryRepo;
 use arrow_server_lib::data::repos::implementors::product_category_repo::ProductCategoryRepo;
 use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
-use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
+use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
 use arrow_server_lib::services::errors::ProductServiceError;
@@ -29,11 +29,13 @@ async fn setup() -> Result<(), result::Error> {
     use arrow_server_lib::data::models::schema::products::dsl::products;
     use arrow_server_lib::data::models::schema::user_roles::dsl::user_roles;
     use arrow_server_lib::data::models::schema::users::dsl::users;
+    use arrow_server_lib::data::models::schema::roles::dsl::roles;
 
     diesel::delete(order_products).execute(&mut conn).await?;
     diesel::delete(orders).execute(&mut conn).await?;
     diesel::delete(products).execute(&mut conn).await?;
     diesel::delete(user_roles).execute(&mut conn).await?;
+    diesel::delete(roles).execute(&mut conn).await?;
     diesel::delete(users).execute(&mut conn).await?;
 
     Ok(())
@@ -62,11 +64,10 @@ async fn create_test_user(username: &str) -> i32 {
         .user_id
 }
 
-async fn create_role_with_permission(user_id: i32, name: &str, permission: RolePermissions) -> i32 {
-    let repo = UserRoleRepo::new();
+async fn create_role_with_permission(_user_id: i32, name: &str, permission: RolePermissions) -> i32 {
+    let repo = RoleRepo::new();
 
-    let new_role = NewUserRole {
-        user_id,
+    let new_role = NewRole {
         name,
         description: None,
     };

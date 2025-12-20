@@ -2,9 +2,9 @@ use crate::api::controllers::dto::role_dto::{
     AssignRoleDTO, NewRoleDTO, RoleDTO, SetPermissionDTO, UpdateRoleDTO,
 };
 use crate::api::request::AddPermissionRequest;
-use crate::data::models::user_roles::{NewUserRole, RolePermissions, UpdateUserRole};
+use crate::data::models::roles::{NewRole, RolePermissions, UpdateRole};
+use crate::data::repos::implementors::role_repo::RoleRepo;
 use crate::data::repos::implementors::user_repo::UserRepo;
-use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::security::jwt::AccessClaims;
 use crate::services::role_service::RoleService;
@@ -16,7 +16,7 @@ use std::str::FromStr;
 
 // Helper to check admin permission
 async fn check_is_admin(role_ids: &[usize]) -> bool {
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
     for &id in role_ids {
         if let Ok(Some(role)) = repo.get_by_id(id as i32).await
             && role.has_permission(RolePermissions::Admin)
@@ -34,7 +34,7 @@ pub async fn get_all_roles(claims: AccessClaims) -> impl IntoResponse {
         return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
 
     match repo.get_all().await {
         Ok(Some(roles)) => {
@@ -62,7 +62,7 @@ pub async fn get_role_by_name(
         return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
 
     match repo.get_by_name(&role_name).await {
         Ok(Some(role)) => {
@@ -87,26 +87,16 @@ pub async fn create_role(
         return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
-    let repo = UserRoleRepo::new();
-    let user_repo = UserRepo::new();
+    let repo = RoleRepo::new();
 
-    // Verify user exists by username
-    let user_id = match user_repo.get_by_username(&new_role.username).await {
-        Ok(Some(u)) => u.user_id,
-        Ok(None) => return (StatusCode::BAD_REQUEST, "User not found").into_response(),
-        Err(e) => {
-            tracing::error!("Error checking user: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to verify user").into_response();
-        }
-    };
-
-    let new_user_role = NewUserRole {
-        user_id,
+    // Note: 'username' in NewRoleDTO is ignored as roles are now global definitions, not per-user.
+    // Assignments happen via assign_role_to_user endpoint.
+    let role_to_create = NewRole {
         name: &new_role.name,
         description: new_role.description.as_deref(),
     };
 
-    match repo.add(new_user_role).await {
+    match repo.add(role_to_create).await {
         Ok(_) => {
             tracing::info!("Role created successfully: {:?}", new_role.name);
             (StatusCode::CREATED, "Role created").into_response()
@@ -129,7 +119,7 @@ pub async fn set_permission(
         return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
 
     // Verify role exists
     match repo.get_by_id(role_id).await {
@@ -177,18 +167,8 @@ pub async fn set_permission_by_name(
         return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
-    let repo = UserRoleRepo::new();
-
-    // Verify role exists
-    let role = match repo.get_by_name(&role_name).await {
-        Ok(None) => return (StatusCode::NOT_FOUND, "Role not found").into_response(),
-        Err(e) => {
-            tracing::error!("Error fetching role: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to fetch role").into_response();
-        }
-        Ok(Some(r)) => r,
-    };
-
+    let service = RoleService::new();
+    
     // Parse permission
     let permission = match RolePermissions::from_str(&permission_dto.permission) {
         Ok(p) => p,
@@ -201,10 +181,10 @@ pub async fn set_permission_by_name(
         }
     };
 
-    match repo.set_permissions(role.role_id, permission).await {
+    match service.set_permission_to_role(&role_name, permission).await {
         Ok(_) => (StatusCode::OK, "Permission set").into_response(),
         Err(e) => {
-            tracing::error!("Error setting permission: {}", e);
+            tracing::error!("Error setting permission: {:?}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to set permission",
@@ -251,8 +231,8 @@ pub async fn add_permission(
         }
     }
 }
-// TODO: Implement properly
-/// Remove permission from a role (sets to NULL) (Admin only)
+
+/// Remove permission from a role (sets to NULL or default) (Admin only)
 pub async fn remove_permission(
     claims: AccessClaims,
     Path(role_id): Path<i32>,
@@ -262,7 +242,7 @@ pub async fn remove_permission(
         return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
 
     // Verify role exists
     match repo.get_by_id(role_id).await {
@@ -274,16 +254,16 @@ pub async fn remove_permission(
         Ok(Some(_)) => {}
     }
 
-    let update_form = UpdateUserRole {
-        user_id: None,
-        name: None,
-        description: None,
-    };
-
-    match repo.update(role_id, update_form).await {
+    // Since we don't have a clear way to remove a single permission from the SET string easily in SQL without complex logic,
+    // and the old implementation was "sets to NULL", we will just update permissions to NULL.
+    // But the `update` method on repo takes `UpdateRole`, which doesn't expose permissions (excluded from diesel macro).
+    // We should use set_permissions with some 'Empty' or just raw SQL.
+    // For now, let's just use `set_permissions` to READ (default).
+    
+    match repo.set_permissions(role_id, RolePermissions::Read).await {
         Ok(_) => (
             StatusCode::OK,
-            "Permission removal not fully implemented - use set_permission to change",
+            "Permissions reset to READ (Default)",
         )
             .into_response(),
         Err(e) => {
@@ -300,7 +280,7 @@ pub async fn delete_role(claims: AccessClaims, Path(role_id): Path<i32>) -> impl
         return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
 
     // Verify role exists
     match repo.get_by_id(role_id).await {
@@ -332,7 +312,7 @@ pub async fn update_role(
         return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
-    let repo = UserRoleRepo::new();
+    let repo = RoleRepo::new();
 
     // Verify role exists
     match repo.get_by_id(role_id).await {
@@ -344,7 +324,7 @@ pub async fn update_role(
         Ok(Some(_)) => {}
     }
 
-    let update_form = UpdateUserRole::from(&update_dto);
+    let update_form = UpdateRole::from(&update_dto);
 
     match repo.update(role_id, update_form).await {
         Ok(_) => (StatusCode::OK, "Role updated").into_response(),
@@ -366,7 +346,7 @@ pub async fn assign_role_to_user(
     }
 
     let user_repo = UserRepo::new();
-    let role_repo = UserRoleRepo::new();
+    let service = RoleService::new();
 
     // Get user by username
     let user = match user_repo.get_by_username(&assign_dto.username).await {
@@ -378,13 +358,13 @@ pub async fn assign_role_to_user(
         }
     };
 
-    match role_repo
+    match service
         .assign_role_to_user(user.user_id, &assign_dto.role_name)
         .await
     {
         Ok(_) => (StatusCode::CREATED, "Role assigned to user").into_response(),
         Err(e) => {
-            tracing::error!("Error assigning role: {}", e);
+            tracing::error!("Error assigning role: {:?}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to assign role").into_response()
         }
     }

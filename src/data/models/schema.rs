@@ -3,7 +3,7 @@
 pub mod sql_types {
     #[derive(diesel::query_builder::QueryId, Clone, diesel::sql_types::SqlType)]
     #[diesel(mysql_type(name = "Set"))]
-    pub struct UserRolesPermissionsSet;
+    pub struct RolesPermissionsSet;
 }
 
 diesel::table! {
@@ -68,16 +68,24 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
-    use super::sql_types::UserRolesPermissionsSet;
+    use super::sql_types::RolesPermissionsSet;
 
-    user_roles (role_id) {
+    roles (role_id) {
         role_id -> Integer,
-        user_id -> Nullable<Integer>,
         #[max_length = 50]
         name -> Varchar,
         #[max_length = 23]
-        permissions -> Nullable<UserRolesPermissionsSet>,
+        permissions -> Nullable<RolesPermissionsSet>,
         description -> Nullable<Text>,
+        created_at -> Nullable<Timestamp>,
+        updated_at -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
+    user_roles (user_id, role_id) {
+        role_id -> Integer,
+        user_id -> Integer,
         created_at -> Nullable<Timestamp>,
         updated_at -> Nullable<Timestamp>,
     }
@@ -100,6 +108,7 @@ diesel::joinable!(order_products -> products (product_id));
 diesel::joinable!(orders -> users (user_id));
 diesel::joinable!(product_categories -> categories (category_id));
 diesel::joinable!(product_categories -> products (product_id));
+diesel::joinable!(user_roles -> roles (role_id));
 diesel::joinable!(user_roles -> users (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
@@ -108,6 +117,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     orders,
     product_categories,
     products,
+    roles,
     user_roles,
     users,
 );

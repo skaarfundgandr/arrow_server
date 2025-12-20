@@ -5,6 +5,8 @@ use arrow_server_lib::data::models::user::NewUser;
 use arrow_server_lib::data::repos::implementors::order_repo::OrderRepo;
 use arrow_server_lib::data::repos::implementors::product_repo::ProductRepo;
 use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
+use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
+use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
 use bigdecimal::BigDecimal;
@@ -25,12 +27,14 @@ async fn setup() -> Result<(), result::Error> {
     use arrow_server_lib::data::models::schema::products::dsl::products;
     use arrow_server_lib::data::models::schema::user_roles::dsl::user_roles;
     use arrow_server_lib::data::models::schema::users::dsl::users;
+    use arrow_server_lib::data::models::schema::roles::dsl::roles;
 
     // Clean up in order due to foreign key constraints
     diesel::delete(order_products).execute(&mut conn).await?;
     diesel::delete(orders).execute(&mut conn).await?;
     diesel::delete(products).execute(&mut conn).await?;
     diesel::delete(user_roles).execute(&mut conn).await?;
+    diesel::delete(roles).execute(&mut conn).await?;
     diesel::delete(users).execute(&mut conn).await?;
 
     Ok(())
@@ -229,13 +233,18 @@ async fn test_get_orders_by_user_id_not_found() {
 }
 
 async fn create_test_role(role_name: &str, user_id: i32) {
-    let repo = arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo::new();
-    let new_role = arrow_server_lib::data::models::user_roles::NewUserRole {
-        user_id,
+    let role_repo = RoleRepo::new();
+    let user_role_repo = UserRoleRepo::new();
+    
+    let new_role = arrow_server_lib::data::models::roles::NewRole {
         name: role_name,
         description: None,
     };
-    repo.add(new_role).await.expect("Failed to add role");
+    role_repo.add(new_role).await.expect("Failed to add role");
+    
+    let role = role_repo.get_by_name(role_name).await.expect("Failed to get role").expect("Role not found");
+    
+    user_role_repo.add_user_role(user_id, role.role_id).await.expect("Failed to assign role");
 }
 
 #[tokio::test]
