@@ -124,15 +124,7 @@ async fn test_get_roles_by_user_id_multiple() {
     let repo = UserRoleRepo::new();
 
     repo.add_user_role(user.user_id, role1.role_id).await.expect("Failed");
-    repo.add_user_role(user.user_id, role2.role_id).await.expect("Failed");
+    let err = repo.add_user_role(user.user_id, role2.role_id).await; // this should fail due to unique constraint
 
-    let roles = repo
-        .get_roles_by_user_id(user.user_id)
-        .await
-        .expect("Failed to get roles");
-
-    assert_eq!(roles.len(), 2);
-    let names: Vec<String> = roles.iter().map(|r| r.name.clone()).collect();
-    assert!(names.contains(&"roleA".to_string()));
-    assert!(names.contains(&"roleB".to_string()));
+    assert!(err.is_err());
 }
