@@ -281,6 +281,26 @@ Create a new user manually.
 *   **URL:** `/orders`
 *   **Method:** `GET`
 *   **Response:** `Vec<OrderResponse>`
+    ```json
+    [
+      {
+        "order_id": 1,
+        "user_id": 123,
+        "products": [
+          {
+            "product_id": 1,
+            "name": "Burger",
+            "price": "9.99"
+          }
+        ],
+        "quantity": 1,
+        "total_amount": "9.99",
+        "status": "pending",
+        "created_at": "...",
+        "updated_at": "..."
+      }
+    ]
+    ```
 
 ### Create Order
 *   **URL:** `/orders`

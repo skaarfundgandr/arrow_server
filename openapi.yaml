@@ -258,10 +258,13 @@ components:
           type: integer
         user_id:
           type: integer
-        product_id:
-          type: integer
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductResponse'
         quantity:
           type: integer
+          description: Total quantity
         total_amount:
           type: string
         status:
