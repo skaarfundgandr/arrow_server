@@ -270,6 +270,10 @@ async fn test_get_all_orders_success() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let orders: Vec<OrderResponse> = serde_json::from_slice(&body).unwrap();
     assert_eq!(orders.len(), 1);
+    
+    // Check order contents
+    assert_eq!(orders[0].products.len(), 1);
+    assert_eq!(orders[0].quantity, 2);
 }
 
 #[tokio::test]
@@ -323,6 +327,7 @@ async fn test_get_user_orders_by_name() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let orders: Vec<OrderResponse> = serde_json::from_slice(&body).unwrap();
     assert_eq!(orders.len(), 1);
+    assert_eq!(orders[0].products.len(), 1);
 }
 
 #[tokio::test]

@@ -33,8 +33,6 @@ diesel::table! {
     orders (order_id) {
         order_id -> Integer,
         user_id -> Integer,
-        product_id -> Integer,
-        quantity -> Integer,
         total_amount -> Decimal,
         #[max_length = 50]
         status -> Nullable<Varchar>,

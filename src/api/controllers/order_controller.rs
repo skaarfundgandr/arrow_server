@@ -3,15 +3,12 @@ use crate::api::response::OrderResponse;
 use crate::data::repos::implementors::user_repo::UserRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::security::jwt::AccessClaims;
-use crate::services::errors::{OrderServiceError, ProductServiceError};
+use crate::services::errors::OrderServiceError;
 use crate::services::order_service::{OrderService, OrderStatus};
-use crate::services::product_service::ProductService;
 use axum::Json;
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use bigdecimal::BigDecimal;
-use bigdecimal::FromPrimitive;
 use std::str::FromStr;
 
 /// Get orders by role
@@ -82,8 +79,8 @@ pub async fn get_order_by_id(claims: AccessClaims, Path(order_id): Path<i32>) ->
 
     for role_id in roles {
         match service.get_order_by_id(order_id, role_id as i32).await {
-            Ok(Some(order)) => {
-                return (StatusCode::OK, Json(OrderResponse::from(order))).into_response();
+            Ok(Some(order_data)) => {
+                return (StatusCode::OK, Json(OrderResponse::from(order_data))).into_response();
             }
             Ok(None) => return (StatusCode::NOT_FOUND, "Order not found").into_response(),
             Err(OrderServiceError::PermissionDenied) => continue,
@@ -100,7 +97,6 @@ pub async fn create_order(
     Json(payload): Json<CreateOrderRequest>,
 ) -> impl IntoResponse {
     let service = OrderService::new();
-    let product_service = ProductService::new();
     let user_repo = UserRepo::new();
     let roles = claims.roles.unwrap_or_default();
 
@@ -121,44 +117,25 @@ pub async fn create_order(
         None => return (StatusCode::FORBIDDEN, "Permission denied").into_response(),
     };
 
-    for item in payload.products {
-        // Get Product Price
-        let product = match product_service
-            .get_product_by_id(item.product_id, role_id)
-            .await
-        {
-            Ok(Some(p)) => p,
-            Ok(None) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    format!("Product {} not found", item.product_id),
-                )
-                    .into_response();
-            }
-            Err(ProductServiceError::PermissionDenied) => {
-                return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-            }
-            Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
-        };
+    let items: Vec<(i32, i32)> = payload.products.into_iter()
+        .map(|item| (item.product_id, item.quantity))
+        .collect();
 
-        let total = product.price * BigDecimal::from_i32(item.quantity).unwrap_or_default();
-
-        match service
-            .create_order(user_id, role_id, item.product_id, item.quantity, total)
-            .await
-        {
-            Ok(_) => {}
-            Err(OrderServiceError::PermissionDenied) => {
-                return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-            }
-            Err(_) => {
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create order")
-                    .into_response();
-            }
+    match service
+        .create_order(user_id, role_id, items)
+        .await
+    {
+        Ok(_) => (StatusCode::CREATED, "Order created").into_response(),
+        Err(OrderServiceError::PermissionDenied) => {
+            (StatusCode::FORBIDDEN, "Permission denied").into_response()
+        }
+        Err(OrderServiceError::OrderCreationFailed) => {
+             (StatusCode::BAD_REQUEST, "Failed to create order (check products)").into_response()
+        }
+        Err(_) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create order").into_response()
         }
     }
-
-    (StatusCode::CREATED, "Orders created").into_response()
 }
 
 /// Get orders by username

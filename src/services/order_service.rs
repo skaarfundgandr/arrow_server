@@ -1,9 +1,11 @@
 use crate::data::models::order::{NewOrder, Order, UpdateOrder};
+use crate::data::models::order_product::OrderProduct;
+use crate::data::models::product::Product;
 use crate::data::models::roles::RolePermissions;
 use crate::data::repos::implementors::order_repo::OrderRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::services::errors::OrderServiceError;
-use bigdecimal::BigDecimal;
+use bigdecimal::{BigDecimal, FromPrimitive};
 
 /// Order statuses for workflow management
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,9 +55,7 @@ impl OrderService {
         &self,
         user_id: i32,
         role_id: i32,
-        product_id: i32,
-        quantity: i32,
-        total_amount: BigDecimal,
+        items: Vec<(i32, i32)>, // product_id, quantity
     ) -> Result<(), OrderServiceError> {
         if !self.has_permission(role_id, RolePermissions::Write).await?
             && !self.has_permission(role_id, RolePermissions::Admin).await?
@@ -63,16 +63,31 @@ impl OrderService {
             return Err(OrderServiceError::PermissionDenied);
         }
 
+        let product_repo = crate::data::repos::implementors::product_repo::ProductRepo::new();
+        let mut order_items = Vec::new();
+        let mut total_amount = BigDecimal::from(0);
+
+        for (pid, qty) in items {
+            let product = product_repo.get_by_id(pid).await
+                .map_err(|_| OrderServiceError::DatabaseError)?
+                .ok_or(OrderServiceError::OrderCreationFailed)?; 
+
+            let price = product.price;
+            let qty_bd = BigDecimal::from_i32(qty).unwrap_or_default();
+            let line_total = &price * &qty_bd;
+            total_amount += line_total;
+
+            order_items.push((pid, qty, price));
+        }
+
         let repo = OrderRepo::new();
         let new_order = NewOrder {
             user_id,
-            product_id,
-            quantity,
             total_amount,
             status: Some(OrderStatus::Pending.as_str().to_string()),
         };
 
-        repo.add(new_order)
+        repo.create_with_items(new_order, order_items)
             .await
             .map_err(|_| OrderServiceError::OrderCreationFailed)
     }
@@ -82,7 +97,7 @@ impl OrderService {
         &self,
         target_user_id: i32,
         role_id: i32,
-    ) -> Result<Option<Vec<Order>>, OrderServiceError> {
+    ) -> Result<Option<Vec<(Order, Vec<(OrderProduct, Product)>)>>, OrderServiceError> {
         let is_admin = self.has_permission(role_id, RolePermissions::Admin).await?;
         let has_read = self.has_permission(role_id, RolePermissions::Read).await?;
         let has_write = self.has_permission(role_id, RolePermissions::Write).await?;
@@ -92,16 +107,24 @@ impl OrderService {
         }
 
         let repo = OrderRepo::new();
-        repo.get_by_user_id(target_user_id)
+        let orders = repo.get_by_user_id(target_user_id)
             .await
-            .map_err(|_| OrderServiceError::DatabaseError)
+            .map_err(|_| OrderServiceError::DatabaseError)?;
+
+        if let Some(orders) = orders {
+            let detailed = repo.attach_products(orders).await
+                .map_err(|_| OrderServiceError::DatabaseError)?;
+            Ok(Some(detailed))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Gets all orders (READ or ADMIN permission required)
     pub async fn get_all_orders(
         &self,
         role_id: i32,
-    ) -> Result<Option<Vec<Order>>, OrderServiceError> {
+    ) -> Result<Option<Vec<(Order, Vec<(OrderProduct, Product)>)>>, OrderServiceError> {
         if !self.has_permission(role_id, RolePermissions::Admin).await?
             && !self.has_permission(role_id, RolePermissions::Read).await?
             && !self.has_permission(role_id, RolePermissions::Write).await?
@@ -110,9 +133,17 @@ impl OrderService {
         }
 
         let repo = OrderRepo::new();
-        repo.get_all()
+        let orders = repo.get_all()
             .await
-            .map_err(|_| OrderServiceError::DatabaseError)
+            .map_err(|_| OrderServiceError::DatabaseError)?;
+
+        if let Some(orders) = orders {
+            let detailed = repo.attach_products(orders).await
+                .map_err(|_| OrderServiceError::DatabaseError)?;
+            Ok(Some(detailed))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Gets an order by ID (must have READ permission or be Admin)
@@ -120,7 +151,7 @@ impl OrderService {
         &self,
         order_id: i32,
         role_id: i32,
-    ) -> Result<Option<Order>, OrderServiceError> {
+    ) -> Result<Option<(Order, Vec<(OrderProduct, Product)>)>, OrderServiceError> {
         let is_admin = self.has_permission(role_id, RolePermissions::Admin).await?;
         let has_read = self.has_permission(role_id, RolePermissions::Read).await?;
         let has_write = self.has_permission(role_id, RolePermissions::Write).await?;
@@ -135,7 +166,13 @@ impl OrderService {
             .await
             .map_err(|_| OrderServiceError::DatabaseError)?;
 
-        Ok(order)
+        if let Some(order) = order {
+            let detailed_list = repo.attach_products(vec![order]).await
+                .map_err(|_| OrderServiceError::DatabaseError)?;
+            Ok(detailed_list.into_iter().next())
+        } else {
+            Ok(None)
+        }
     }
 
     /// Cancels an order (must have WRITE permission or be Admin)
@@ -151,8 +188,6 @@ impl OrderService {
 
         let update = UpdateOrder {
             user_id: None,
-            product_id: None,
-            quantity: None,
             total_amount: None,
             status: Some(OrderStatus::Cancelled.as_str()),
         };
@@ -185,8 +220,6 @@ impl OrderService {
 
         let update = UpdateOrder {
             user_id: None,
-            product_id: None,
-            quantity: None,
             total_amount: None,
             status: Some(new_status.as_str()),
         };
@@ -201,7 +234,7 @@ impl OrderService {
         &self,
         status: OrderStatus,
         role_id: i32,
-    ) -> Result<Option<Vec<Order>>, OrderServiceError> {
+    ) -> Result<Option<Vec<(Order, Vec<(OrderProduct, Product)>)>>, OrderServiceError> {
         if !self.has_permission(role_id, RolePermissions::Read).await?
             && !self.has_permission(role_id, RolePermissions::Admin).await?
             && !self.has_permission(role_id, RolePermissions::Write).await?
@@ -210,9 +243,17 @@ impl OrderService {
         }
 
         let repo = OrderRepo::new();
-        repo.get_by_status(status.as_str())
+        let orders = repo.get_by_status(status.as_str())
             .await
-            .map_err(|_| OrderServiceError::DatabaseError)
+            .map_err(|_| OrderServiceError::DatabaseError)?;
+
+        if let Some(orders) = orders {
+            let detailed = repo.attach_products(orders).await
+                .map_err(|_| OrderServiceError::DatabaseError)?;
+            Ok(Some(detailed))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Gets orders by role (READ or ADMIN permission required)
@@ -220,7 +261,7 @@ impl OrderService {
         &self,
         role_name: &str,
         role_id: i32,
-    ) -> Result<Option<Vec<Order>>, OrderServiceError> {
+    ) -> Result<Option<Vec<(Order, Vec<(OrderProduct, Product)>)>>, OrderServiceError> {
         if !self.has_permission(role_id, RolePermissions::Read).await?
             && !self.has_permission(role_id, RolePermissions::Admin).await?
         {
@@ -228,9 +269,17 @@ impl OrderService {
         }
 
         let repo = OrderRepo::new();
-        repo.get_orders_by_role_name(role_name)
+        let orders = repo.get_orders_by_role_name(role_name)
             .await
-            .map_err(|_| OrderServiceError::DatabaseError)
+            .map_err(|_| OrderServiceError::DatabaseError)?;
+            
+        if let Some(orders) = orders {
+            let detailed = repo.attach_products(orders).await
+                .map_err(|_| OrderServiceError::DatabaseError)?;
+            Ok(Some(detailed))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Deletes an order

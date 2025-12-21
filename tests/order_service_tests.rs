@@ -115,13 +115,13 @@ async fn test_create_order_with_write_permission() {
 
     let service = OrderService::new();
 
+    let items = vec![(product_id, 2)];
+
     let result = service
         .create_order(
             user_id,
             role_id,
-            product_id,
-            2,
-            BigDecimal::from_str("30.00").unwrap(),
+            items,
         )
         .await;
 
@@ -142,13 +142,13 @@ async fn test_create_order_with_admin_permission() {
 
     let service = OrderService::new();
 
+    let items = vec![(product_id, 1)];
+
     let result = service
         .create_order(
             user_id,
             role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            items,
         )
         .await;
 
@@ -169,13 +169,13 @@ async fn test_create_order_without_permission() {
 
     let service = OrderService::new();
 
+    let items = vec![(product_id, 1)];
+
     let result = service
         .create_order(
             user_id,
             role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            items,
         )
         .await;
 
@@ -199,13 +199,12 @@ async fn test_get_user_own_orders() {
     let service = OrderService::new();
 
     // Create an order
+    let items = vec![(product_id, 1)];
     service
         .create_order(
             user_id,
             write_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            items,
         )
         .await
         .expect("Failed to create order");
@@ -238,13 +237,12 @@ async fn test_get_other_user_orders_with_read_permission() {
     let service = OrderService::new();
 
     // Create order for user1
+    let items = vec![(product_id, 1)];
     service
         .create_order(
             user1_id,
             write_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            items,
         )
         .await
         .expect("Failed to create order");
@@ -275,9 +273,7 @@ async fn test_admin_get_all_orders() {
         .create_order(
             user_id,
             admin_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            vec![(product_id, 1)],
         )
         .await
         .expect("Failed to create order 1");
@@ -286,9 +282,7 @@ async fn test_admin_get_all_orders() {
         .create_order(
             user_id,
             admin_role_id,
-            product_id,
-            2,
-            BigDecimal::from_str("30.00").unwrap(),
+            vec![(product_id, 2)],
         )
         .await
         .expect("Failed to create order 2");
@@ -320,9 +314,7 @@ async fn test_read_permission_get_all_orders() {
         .create_order(
             user_id,
             write_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            vec![(product_id, 1)],
         )
         .await
         .expect("Failed to create order");
@@ -354,9 +346,7 @@ async fn test_cancel_own_pending_order() {
         .create_order(
             user_id,
             write_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            vec![(product_id, 1)],
         )
         .await
         .expect("Failed to create order");
@@ -367,7 +357,7 @@ async fn test_cancel_own_pending_order() {
         .await
         .expect("Failed to get orders")
         .expect("No orders");
-    let order_id = orders[0].order_id;
+    let order_id = orders[0].0.order_id;
 
     // Cancel order using write role (owner cancelling their own pending order)
     let result = service.cancel_order(order_id, write_role_id).await;
@@ -375,7 +365,7 @@ async fn test_cancel_own_pending_order() {
     assert!(result.is_ok(), "Should be able to cancel own pending order");
 
     // Verify status changed
-    let cancelled_order = service
+    let (cancelled_order, _) = service
         .get_order_by_id(order_id, admin_role_id)
         .await
         .expect("Failed to get order")
@@ -405,9 +395,7 @@ async fn test_cancel_other_user_order_denied() {
         .create_order(
             user1_id,
             write_role1_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            vec![(product_id, 1)],
         )
         .await
         .expect("Failed to create order");
@@ -418,7 +406,7 @@ async fn test_cancel_other_user_order_denied() {
         .await
         .expect("Failed to get orders")
         .expect("No orders");
-    let order_id = orders[0].order_id;
+    let order_id = orders[0].0.order_id;
 
     // User2 tries to cancel user1's order (now only checks role permission)
     // With WRITE permission, this should now succeed
@@ -448,9 +436,7 @@ async fn test_write_permission_update_order_status() {
         .create_order(
             user_id,
             write_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            vec![(product_id, 1)],
         )
         .await
         .expect("Failed to create order");
@@ -460,7 +446,7 @@ async fn test_write_permission_update_order_status() {
         .await
         .expect("Failed to get orders")
         .expect("No orders");
-    let order_id = orders[0].order_id;
+    let order_id = orders[0].0.order_id;
 
     // Update status to Accepted (requires WRITE permission)
     service
@@ -468,7 +454,7 @@ async fn test_write_permission_update_order_status() {
         .await
         .expect("Failed to update status");
 
-    let updated_order = service
+    let (updated_order, _) = service
         .get_order_by_id(order_id, read_role_id)
         .await
         .expect("Failed to get order")
@@ -482,7 +468,7 @@ async fn test_write_permission_update_order_status() {
         .await
         .expect("Failed to update status");
 
-    let completed_order = service
+    let (completed_order, _) = service
         .get_order_by_id(order_id, read_role_id)
         .await
         .expect("Failed to get order")
@@ -509,9 +495,7 @@ async fn test_non_admin_update_status_denied() {
         .create_order(
             user_id,
             write_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            vec![(product_id, 1)],
         )
         .await
         .expect("Failed to create order");
@@ -522,7 +506,7 @@ async fn test_non_admin_update_status_denied() {
         .await
         .expect("Failed to get orders")
         .expect("No orders");
-    let order_id = orders[0].order_id;
+    let order_id = orders[0].0.order_id;
 
     // Try to update status with write role (now allowed per new service logic)
     let result = service
@@ -554,9 +538,7 @@ async fn test_get_orders_by_status() {
         .create_order(
             user_id,
             write_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            vec![(product_id, 1)],
         )
         .await
         .expect("Failed to create order 1");
@@ -565,9 +547,7 @@ async fn test_get_orders_by_status() {
         .create_order(
             user_id,
             write_role_id,
-            product_id,
-            2,
-            BigDecimal::from_str("30.00").unwrap(),
+            vec![(product_id, 2)],
         )
         .await
         .expect("Failed to create order 2");
@@ -589,7 +569,7 @@ async fn test_get_orders_by_status() {
         .expect("No orders");
 
     service
-        .update_order_status(orders[0].order_id, OrderStatus::Completed, write_role_id)
+        .update_order_status(orders[0].0.order_id, OrderStatus::Completed, write_role_id)
         .await
         .expect("Failed to update status");
 
@@ -618,9 +598,7 @@ async fn test_delete_order_admin_only() {
         .create_order(
             user_id,
             admin_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            vec![(product_id, 1)],
         )
         .await
         .expect("Failed to create order");
@@ -630,7 +608,7 @@ async fn test_delete_order_admin_only() {
         .await
         .expect("Failed to get orders")
         .expect("No orders");
-    let order_id = orders[0].order_id;
+    let order_id = orders[0].0.order_id;
 
     // Delete order
     service
@@ -665,9 +643,7 @@ async fn test_delete_order_non_admin_denied() {
         .create_order(
             user_id,
             write_role_id,
-            product_id,
-            1,
-            BigDecimal::from_str("15.00").unwrap(),
+            vec![(product_id, 1)],
         )
         .await
         .expect("Failed to create order");
@@ -678,7 +654,7 @@ async fn test_delete_order_non_admin_denied() {
         .await
         .expect("Failed to get orders")
         .expect("No orders");
-    let order_id = orders[0].order_id;
+    let order_id = orders[0].0.order_id;
 
     // Try to delete with write role (requires DELETE or ADMIN permission)
     let result = service.delete_order(order_id, write_role_id).await;

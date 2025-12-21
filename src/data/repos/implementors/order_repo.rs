@@ -1,7 +1,11 @@
+use std::collections::HashMap;
 use crate::data::database::Database;
 use crate::data::models::order::{NewOrder, Order, UpdateOrder};
+use crate::data::models::order_product::{NewOrderProduct, OrderProduct};
+use crate::data::models::product::Product;
 use crate::data::repos::traits::repository::Repository;
 use async_trait::async_trait;
+use bigdecimal::BigDecimal;
 use diesel::prelude::*;
 use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
@@ -116,6 +120,95 @@ impl OrderRepo {
             Err(result::Error::NotFound) => Ok(None),
             Err(e) => Err(e),
         }
+    }
+
+    pub async fn create_with_items(
+        &self,
+        new_order: NewOrder,
+        items: Vec<(i32, i32, BigDecimal)>,
+    ) -> Result<(), result::Error> {
+        use crate::data::models::schema::orders::dsl::{orders};
+        use crate::data::models::schema::order_products::dsl::order_products;
+
+        let db = Database::new().await;
+        let mut conn = db.get_connection().await.map_err(|e| {
+            result::Error::DatabaseError(
+                result::DatabaseErrorKind::UnableToSendCommand,
+                Box::new(e.to_string()),
+            )
+        })?;
+
+        conn.transaction::<_, result::Error, _>(|connection| {
+            async move {
+                diesel::insert_into(orders)
+                    .values(&new_order)
+                    .execute(connection)
+                    .await?;
+
+                let new_id: i32 = diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>("LAST_INSERT_ID()"))
+                    .get_result(connection)
+                    .await?;
+
+                let new_items: Vec<NewOrderProduct> = items.into_iter().map(|(pid, qty, price)| {
+                    NewOrderProduct {
+                        order_id: new_id,
+                        product_id: pid,
+                        quantity: qty,
+                        unit_price: price,
+                    }
+                }).collect();
+
+                diesel::insert_into(order_products)
+                    .values(&new_items)
+                    .execute(connection)
+                    .await?;
+
+                Ok(())
+            }
+            .scope_boxed()
+        })
+        .await
+    }
+
+    pub async fn attach_products(
+        &self,
+        orders_list: Vec<Order>,
+    ) -> Result<Vec<(Order, Vec<(OrderProduct, Product)>)>, result::Error> {
+        if orders_list.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        use crate::data::models::schema::order_products::dsl::{order_products, order_id};
+        use crate::data::models::schema::products::dsl::products;
+
+        let db = Database::new().await;
+        let mut conn = db.get_connection().await.map_err(|e| {
+            result::Error::DatabaseError(
+                result::DatabaseErrorKind::UnableToSendCommand,
+                Box::new(e.to_string()),
+            )
+        })?;
+
+        let ids: Vec<i32> = orders_list.iter().map(|o| o.order_id).collect();
+
+        let items_data: Vec<(OrderProduct, Product)> = order_products
+            .inner_join(products)
+            .filter(order_id.eq_any(ids))
+            .load::<(OrderProduct, Product)>(&mut conn)
+            .await?;
+
+        let mut map: HashMap<i32, Vec<(OrderProduct, Product)>> = HashMap::new();
+        
+        for item in items_data {
+            map.entry(item.0.order_id).or_default().push(item);
+        }
+
+        let result = orders_list.into_iter().map(|o| {
+            let items = map.remove(&o.order_id).unwrap_or_default();
+            (o, items)
+        }).collect();
+
+        Ok(result)
     }
 }
 

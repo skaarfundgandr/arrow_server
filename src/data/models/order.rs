@@ -12,8 +12,6 @@ use diesel::prelude::*;
 pub struct Order {
     pub order_id: i32,
     pub user_id: i32,
-    pub product_id: i32,
-    pub quantity: i32,
     pub total_amount: BigDecimal,
     pub status: Option<String>,
     pub created_at: Option<chrono::NaiveDateTime>,
@@ -24,8 +22,6 @@ pub struct Order {
 #[diesel(table_name = orders)]
 pub struct NewOrder {
     pub user_id: i32,
-    pub product_id: i32,
-    pub quantity: i32,
     pub total_amount: BigDecimal,
     pub status: Option<String>,
 }
@@ -34,8 +30,6 @@ pub struct NewOrder {
 #[diesel(table_name = orders)]
 pub struct UpdateOrder<'a> {
     pub user_id: Option<i32>,
-    pub product_id: Option<i32>,
-    pub quantity: Option<i32>,
     pub total_amount: Option<BigDecimal>,
     pub status: Option<&'a str>,
 }

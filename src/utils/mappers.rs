@@ -6,6 +6,7 @@ use crate::api::request::{CreateCategoryRequest, UpdateCategoryRequest};
 use crate::api::response::{CategoryResponse, OrderResponse, ProductResponse};
 use crate::data::models::categories::{Category, NewCategory, UpdateCategory};
 use crate::data::models::order::Order;
+use crate::data::models::order_product::OrderProduct;
 use crate::data::models::product::Product;
 use crate::data::models::schema::sql_types::RolesPermissionsSet;
 use crate::data::models::user::{NewUser, UpdateUser};
@@ -137,13 +138,21 @@ impl<'a> From<&'a UpdateCategoryRequest> for UpdateCategory<'a> {
     }
 }
 
-impl From<Order> for OrderResponse {
-    fn from(order: Order) -> Self {
+impl From<(Order, Vec<(OrderProduct, Product)>)> for OrderResponse {
+    fn from((order, items): (Order, Vec<(OrderProduct, Product)>)) -> Self {
+        let mut product_responses = Vec::new();
+        let mut total_qty = 0;
+        
+        for (op, p) in items {
+            total_qty += op.quantity;
+            product_responses.push(ProductResponse::from(p));
+        }
+
         Self {
             order_id: order.order_id,
             user_id: order.user_id,
-            product_id: order.product_id,
-            quantity: order.quantity,
+            products: product_responses,
+            quantity: total_qty,
             total_amount: order.total_amount,
             status: order.status,
             created_at: order.created_at.map(|d| d.to_string()),
@@ -151,6 +160,8 @@ impl From<Order> for OrderResponse {
         }
     }
 }
+
+
 
 impl From<Product> for ProductResponse {
     fn from(product: Product) -> Self {

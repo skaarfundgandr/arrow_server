@@ -12,7 +12,7 @@ pub struct LoginResponse {
 pub struct OrderResponse {
     pub order_id: i32,
     pub user_id: i32,
-    pub product_id: i32,
+    pub products: Vec<ProductResponse>,
     pub quantity: i32,
     pub total_amount: BigDecimal,
     pub status: Option<String>,
