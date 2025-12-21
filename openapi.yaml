@@ -1,0 +1,814 @@
+openapi: 3.0.0
+info:
+  title: Arrow Server API
+  description: REST API for restaurant order management.
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:3000/api/v1
+    description: Local Development Server
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # --- DTOs ---
+    LoginDTO:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    NewUserDTO:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    UpdateUserDTO:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        message:
+          type: string
+
+    UserDTO:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        username:
+          type: string
+        role:
+          $ref: '#/components/schemas/RoleDTO'
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    RoleDTO:
+      type: object
+      properties:
+        role_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+
+    NewRoleDTO:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    UpdateRoleDTO:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    AssignRoleDTO:
+      type: object
+      required:
+        - username
+        - role_name
+      properties:
+        username:
+          type: string
+        role_name:
+          type: string
+    
+    AddPermissionRequest:
+      type: object
+      required:
+        - role_name
+        - permission
+      properties:
+        role_name:
+          type: string
+        permission:
+          type: string
+          enum: [READ, WRITE, DELETE, ADMIN]
+
+    SetPermissionDTO:
+      type: object
+      required:
+        - permission
+      properties:
+        permission:
+          type: string
+          enum: [READ, WRITE, DELETE, ADMIN]
+
+    CreateProductRequest:
+      type: object
+      required:
+        - name
+        - price
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: string
+          description: Decimal string
+        product_image_uri:
+          type: string
+        categories:
+          type: array
+          items:
+            type: string
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: string
+        product_image_uri:
+          type: string
+        categories:
+          type: array
+          items:
+            type: string
+
+    ProductResponse:
+      type: object
+      properties:
+        product_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        price:
+          type: string
+        product_image_uri:
+          type: string
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryResponse'
+
+    CreateCategoryRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    UpdateCategoryRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    CategoryResponse:
+      type: object
+      properties:
+        category_id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+
+    AssignCategoryRequest:
+      type: object
+      required:
+        - category
+        - product
+      properties:
+        category:
+          type: string
+        product:
+          type: string
+
+    CreateOrderRequest:
+      type: object
+      required:
+        - products
+      properties:
+        products:
+          type: array
+          items:
+            type: object
+            required:
+              - product_id
+              - quantity
+            properties:
+              product_id:
+                type: integer
+              quantity:
+                type: integer
+
+    UpdateOrderStatusRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+
+    OrderResponse:
+      type: object
+      properties:
+        order_id:
+          type: integer
+        user_id:
+          type: integer
+        product_id:
+          type: integer
+        quantity:
+          type: integer
+        total_amount:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+security:
+  - BearerAuth: []
+
+paths:
+  # --- Auth ---
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginDTO'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register new user
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewUserDTO'
+      responses:
+        '201':
+          description: User created (and logged in)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+
+  /auth/refresh:
+    get:
+      tags: [Auth]
+      summary: Refresh token
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+
+  # --- Users ---
+  /users:
+    get:
+      tags: [Users]
+      summary: Get all users
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserDTO'
+
+  /users/create:
+    post:
+      tags: [Users]
+      summary: Create user (Admin)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewUserDTO'
+      responses:
+        '201':
+          description: User created
+
+  /users/{id}:
+    get:
+      tags: [Users]
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDTO'
+    post:
+      tags: [Users]
+      summary: Edit User (Admin)
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserDTO'
+      responses:
+        '200':
+          description: User updated
+    delete:
+      tags: [Users]
+      summary: Delete User (Admin)
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: User deleted
+
+  /users/search:
+    get:
+      tags: [Users]
+      summary: Search user by username
+      parameters:
+        - in: query
+          name: username
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDTO'
+
+  # --- Roles ---
+  /roles:
+    get:
+      tags: [Roles]
+      summary: Get all roles
+      responses:
+        '200':
+          description: List of roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoleDTO'
+
+  /roles/create:
+    post:
+      tags: [Roles]
+      summary: Create Role
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewRoleDTO'
+      responses:
+        '201':
+          description: Role created
+
+  /roles/update/{id}:
+    post:
+      tags: [Roles]
+      summary: Update Role
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleDTO'
+      responses:
+        '200':
+          description: Role updated
+
+  /roles/{id}:
+    delete:
+      tags: [Roles]
+      summary: Delete Role
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Role deleted
+
+  /roles/assign:
+    post:
+      tags: [Roles]
+      summary: Assign role to user
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRoleDTO'
+      responses:
+        '201':
+          description: Role assigned
+
+  /roles/add_permission:
+    post:
+      tags: [Roles]
+      summary: Add permission to role
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPermissionRequest'
+      responses:
+        '200':
+          description: Permission added
+
+  /roles/{id}/set_permission:
+    post:
+      tags: [Roles]
+      summary: Set permission (overwrite)
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPermissionDTO'
+      responses:
+        '200':
+          description: Permission set
+
+  /roles/{id}/delete_permission:
+    patch:
+      tags: [Roles]
+      summary: Reset permission to READ
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Permissions reset
+
+  # --- Products ---
+  /products:
+    get:
+      tags: [Products]
+      summary: Get all products
+      responses:
+        '200':
+          description: List of products
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductResponse'
+    post:
+      tags: [Products]
+      summary: Create product
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Product created
+
+  /products/{id}:
+    get:
+      tags: [Products]
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductResponse'
+    put:
+      tags: [Products]
+      summary: Update product
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Product updated
+    delete:
+      tags: [Products]
+      summary: Delete product
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Product deleted
+
+  # --- Categories ---
+  /categories:
+    get:
+      tags: [Categories]
+      responses:
+        '200':
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CategoryResponse'
+    post:
+      tags: [Categories]
+      summary: Create category
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCategoryRequest'
+      responses:
+        '201':
+          description: Category created
+
+  /categories/{id}:
+    put:
+      tags: [Categories]
+      summary: Update category
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCategoryRequest'
+      responses:
+        '201':
+          description: Category updated
+    delete:
+      tags: [Categories]
+      summary: Delete category
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Category deleted
+
+  /categories/product:
+    post:
+      tags: [Categories]
+      summary: Add product to category
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignCategoryRequest'
+      responses:
+        '201':
+          description: Product assigned
+
+  /categories/product/remove:
+    post:
+      tags: [Categories]
+      summary: Remove product from category
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignCategoryRequest'
+      responses:
+        '200':
+          description: Product removed
+
+  /categories/{category_name}/products:
+    get:
+      tags: [Categories]
+      summary: Get products by category
+      parameters:
+        - in: path
+          name: category_name
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: List of products in category
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object # Simplified response schema
+                  properties:
+                    product:
+                      $ref: '#/components/schemas/ProductResponse'
+                    category:
+                      $ref: '#/components/schemas/CategoryResponse'
+
+  # --- Orders ---
+  /orders:
+    get:
+      tags: [Orders]
+      summary: Get all orders
+      responses:
+        '200':
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderResponse'
+    post:
+      tags: [Orders]
+      summary: Create order
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: Order created
+
+  /orders/{id}:
+    get:
+      tags: [Orders]
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+    post:
+      tags: [Orders]
+      summary: Update order status
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrderStatusRequest'
+      responses:
+        '200':
+          description: Status updated
+
+  /orders/user/{username}:
+    get:
+      tags: [Orders]
+      parameters:
+        - in: path
+          name: username
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: List of orders for user
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderResponse'
+
+  /orders/role/{role_name}:
+    get:
+      tags: [Orders]
+      parameters:
+        - in: path
+          name: role_name
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: List of orders by role
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrderResponse'
