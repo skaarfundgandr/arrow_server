@@ -32,6 +32,7 @@ pub async fn start() {
     tracing::info!("Listening on port 3000");
 
     axum::serve(listener, router)
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("Failed to start the server");
 }
@@ -44,4 +45,30 @@ pub async fn logging_middleware(request: Request<Body>, next: Next) -> Response 
         request.uri()
     );
     next.run(request).await
+}
+
+pub async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Failed to install CTRL+C signal handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("Failed to install terminate signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    tracing::info!("Shutting down gracefully...");
 }
