@@ -29,6 +29,7 @@ pub enum OrderServiceError {
     OrderDeletionFailed,
     PermissionDenied,
     InvalidStatusTransition,
+    PaymentConflict,
     DatabaseError,
 }
 
@@ -43,6 +44,7 @@ impl std::fmt::Display for OrderServiceError {
             OrderServiceError::OrderDeletionFailed => write!(f, "Order deletion failed"),
             OrderServiceError::PermissionDenied => write!(f, "Permission denied"),
             OrderServiceError::InvalidStatusTransition => write!(f, "Invalid status transition"),
+            OrderServiceError::PaymentConflict => write!(f, "Order payment conflict"),
             OrderServiceError::DatabaseError => write!(f, "Database error"),
         }
     }

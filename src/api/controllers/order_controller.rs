@@ -1,6 +1,6 @@
 use crate::api::extractors::OptionalAccessClaims;
 use crate::api::request::{CreateOrderRequest, UpdateOrderStatusRequest};
-use crate::api::response::{CreateOrderResponse, OrderResponse};
+use crate::api::response::{CreateOrderResponse, OrderResponse, PayOrderResponse};
 use crate::data::repos::implementors::user_repo::UserRepo;
 use crate::security::jwt::AccessClaims;
 use crate::services::errors::OrderServiceError;
@@ -141,6 +141,68 @@ pub async fn get_order_by_id(
             }
         },
         _ => (StatusCode::FORBIDDEN, "Permission denied").into_response(),
+    }
+}
+
+/// Processes a mock payment for an order.
+/// Access is granted to an ADMIN (JWT) or to anyone holding a valid signed
+/// order_url (exp + sig query params, no JWT required).
+pub async fn pay_order(
+    OptionalAccessClaims(claims): OptionalAccessClaims,
+    Query(params): Query<OrderUrlQuery>,
+    Path(order_id): Path<i32>,
+) -> impl IntoResponse {
+    let service = OrderService::new();
+
+    let mut is_admin = false;
+    if let Some(claims) = &claims {
+        let roles = claims.roles.clone().unwrap_or_default();
+        for role_id in roles {
+            match service.is_admin(role_id as i32).await {
+                Ok(true) => {
+                    is_admin = true;
+                    break;
+                }
+                Ok(false) => continue,
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
+                }
+            }
+        }
+    }
+
+    if !is_admin {
+        match (params.exp, params.sig) {
+            (Some(exp), Some(sig)) => match order_url::verify_order_url(order_id, exp, &sig) {
+                Ok(()) => {}
+                Err(OrderUrlError::InvalidSignature) => {
+                    return (StatusCode::BAD_REQUEST, "Invalid order url").into_response();
+                }
+                Err(OrderUrlError::Expired) => {
+                    return (StatusCode::GONE, "Order url expired").into_response();
+                }
+            },
+            _ => return (StatusCode::FORBIDDEN, "Permission denied").into_response(),
+        }
+    }
+
+    match service.pay_order(order_id).await {
+        Ok((payment_status, message)) => (
+            StatusCode::OK,
+            Json(PayOrderResponse {
+                order_id,
+                payment_status,
+                message,
+            }),
+        )
+            .into_response(),
+        Err(OrderServiceError::OrderNotFound) => {
+            (StatusCode::NOT_FOUND, "Order not found").into_response()
+        }
+        Err(OrderServiceError::PaymentConflict) => {
+            (StatusCode::CONFLICT, "Order already paid").into_response()
+        }
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
     }
 }
 

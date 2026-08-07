@@ -212,6 +212,7 @@ impl OrderService {
             user_id: None,
             total_amount: None,
             status: Some(OrderStatus::Cancelled.as_str()),
+            payment_status: None,
         };
 
         repo.update(order_id, update)
@@ -244,11 +245,55 @@ impl OrderService {
             user_id: None,
             total_amount: None,
             status: Some(new_status.as_str()),
+            payment_status: None,
         };
 
         repo.update(order_id, update)
             .await
             .map_err(|_| OrderServiceError::OrderUpdateFailed)
+    }
+
+    /// Processes a mock payment for an order.
+    /// Only orders with payment_status `unpaid` or `failed` are payable;
+    /// an already `paid` order yields `PaymentConflict`. The mock payment
+    /// FAILS when the order total exceeds the configured MAX_PAYMENT_AMOUNT.
+    /// Returns the final payment_status and a human-readable message.
+    pub async fn pay_order(&self, order_id: i32) -> Result<(String, String), OrderServiceError> {
+        let repo = OrderRepo::new();
+
+        let order = repo
+            .get_by_id(order_id)
+            .await
+            .map_err(|_| OrderServiceError::DatabaseError)?
+            .ok_or(OrderServiceError::OrderNotFound)?;
+
+        match order.payment_status.as_str() {
+            "unpaid" | "failed" => {}
+            _ => return Err(OrderServiceError::PaymentConflict),
+        }
+
+        let config = crate::api::config::Config::default();
+        let (final_status, message) = if order.total_amount > config.max_payment_amount {
+            (
+                "failed".to_string(),
+                "Payment failed: amount exceeds the maximum allowed".to_string(),
+            )
+        } else {
+            ("paid".to_string(), "Payment successful".to_string())
+        };
+
+        let update = UpdateOrder {
+            user_id: None,
+            total_amount: None,
+            status: None,
+            payment_status: Some(&final_status),
+        };
+
+        repo.update(order_id, update)
+            .await
+            .map_err(|_| OrderServiceError::OrderUpdateFailed)?;
+
+        Ok((final_status, message))
     }
 
     /// Gets orders by status

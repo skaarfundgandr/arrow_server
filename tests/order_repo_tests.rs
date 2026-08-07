@@ -374,6 +374,7 @@ async fn test_update_order() {
         user_id: None,
         total_amount: Some(BigDecimal::from_str("50.00").unwrap()),
         status: Some("completed"),
+        payment_status: None,
     };
 
     repo.update(order_id, update_form)
@@ -423,6 +424,7 @@ async fn test_update_order_partial() {
         user_id: None,
         total_amount: None,
         status: Some("shipped"),
+        payment_status: None,
     };
 
     repo.update(order_id, update_form)

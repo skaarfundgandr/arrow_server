@@ -16,6 +16,7 @@ pub struct OrderResponse {
     pub quantity: i32,
     pub total_amount: BigDecimal,
     pub status: Option<String>,
+    pub payment_status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -26,6 +27,13 @@ pub struct OrderResponse {
 pub struct CreateOrderResponse {
     pub order: OrderResponse,
     pub order_url: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PayOrderResponse {
+    pub order_id: i32,
+    pub payment_status: String,
+    pub message: String,
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProductResponse {

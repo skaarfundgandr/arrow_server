@@ -1,6 +1,8 @@
 #[cfg(test)]
 pub mod database_tests;
 #[cfg(test)]
+pub mod order_pay_tests;
+#[cfg(test)]
 pub mod order_product_repo_tests;
 #[cfg(test)]
 pub mod order_repo_tests;

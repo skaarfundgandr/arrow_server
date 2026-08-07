@@ -33,4 +33,5 @@ pub struct UpdateOrder<'a> {
     pub user_id: Option<i32>,
     pub total_amount: Option<BigDecimal>,
     pub status: Option<&'a str>,
+    pub payment_status: Option<&'a str>,
 }
