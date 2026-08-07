@@ -50,19 +50,14 @@ impl OrderService {
         OrderService
     }
 
-    /// Creates a new order for a user (requires WRITE permission or Admin)
+    /// Creates a new order. Public endpoint: no permission check is performed.
+    /// `user_id` is `None` for guest orders.
+    /// Returns the newly created order id.
     pub async fn create_order(
         &self,
-        user_id: i32,
-        role_id: i32,
+        user_id: Option<i32>,
         items: Vec<(i32, i32)>, // product_id, quantity
-    ) -> Result<(), OrderServiceError> {
-        if !self.has_permission(role_id, RolePermissions::Write).await?
-            && !self.has_permission(role_id, RolePermissions::Admin).await?
-        {
-            return Err(OrderServiceError::PermissionDenied);
-        }
-
+    ) -> Result<i32, OrderServiceError> {
         let product_repo = crate::data::repos::implementors::product_repo::ProductRepo::new();
         let mut order_items = Vec::new();
         let mut total_amount = BigDecimal::from(0);
@@ -84,7 +79,7 @@ impl OrderService {
         let new_order = NewOrder {
             user_id,
             total_amount,
-            status: Some(OrderStatus::Pending.as_str().to_string()),
+            status: OrderStatus::Pending.as_str().to_string(),
         };
 
         repo.create_with_items(new_order, order_items)
@@ -144,6 +139,33 @@ impl OrderService {
         } else {
             Ok(None)
         }
+    }
+
+    /// Gets an order by ID without any permission check.
+    /// Used for the public order_url flow and by the controller, which applies
+    /// its own authorization rules (ADMIN, owner, or valid order_url).
+    pub async fn get_order_by_id_public(
+        &self,
+        order_id: i32,
+    ) -> Result<Option<(Order, Vec<(OrderProduct, Product)>)>, OrderServiceError> {
+        let repo = OrderRepo::new();
+        let order = repo
+            .get_by_id(order_id)
+            .await
+            .map_err(|_| OrderServiceError::DatabaseError)?;
+
+        if let Some(order) = order {
+            let detailed_list = repo.attach_products(vec![order]).await
+                .map_err(|_| OrderServiceError::DatabaseError)?;
+            Ok(detailed_list.into_iter().next())
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Checks whether a role carries the ADMIN permission.
+    pub async fn is_admin(&self, role_id: i32) -> Result<bool, OrderServiceError> {
+        Ok(self.has_permission(role_id, RolePermissions::Admin).await?)
     }
 
     /// Gets an order by ID (must have READ permission or be Admin)

@@ -154,7 +154,7 @@ impl From<(Order, Vec<(OrderProduct, Product)>)> for OrderResponse {
             products: product_responses,
             quantity: total_qty,
             total_amount: order.total_amount,
-            status: order.status,
+            status: Some(order.status),
             created_at: order.created_at.map(|d| d.to_string()),
             updated_at: order.updated_at.map(|d| d.to_string()),
         }

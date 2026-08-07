@@ -12,6 +12,11 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
 pub async fn start() {
+    let user_service = crate::services::user_service::UserService::new();
+    if let Err(e) = user_service.seed_admin_from_env().await {
+        tracing::warn!("Failed to seed admin user from environment: {}", e);
+    }
+
     let cors_layer = CorsLayer::new().allow_origin(Any);
     let router = Router::new()
         .route("/api", get(|| async { "Arrow Server API is running!" }))

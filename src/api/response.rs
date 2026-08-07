@@ -8,10 +8,10 @@ pub struct LoginResponse {
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OrderResponse {
     pub order_id: i32,
-    pub user_id: i32,
+    pub user_id: Option<i32>,
     pub products: Vec<ProductResponse>,
     pub quantity: i32,
     pub total_amount: BigDecimal,
@@ -21,7 +21,13 @@ pub struct OrderResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
 }
-#[derive(Serialize, Deserialize)]
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct CreateOrderResponse {
+    pub order: OrderResponse,
+    pub order_url: String,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProductResponse {
     pub product_id: i32,
     pub name: String,
@@ -32,7 +38,7 @@ pub struct ProductResponse {
 }
 
 #[skip_serializing_none]
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CategoryResponse {
     pub category_id: Option<i32>,
     pub name: String,

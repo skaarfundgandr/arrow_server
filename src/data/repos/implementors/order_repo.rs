@@ -126,7 +126,7 @@ impl OrderRepo {
         &self,
         new_order: NewOrder,
         items: Vec<(i32, i32, BigDecimal)>,
-    ) -> Result<(), result::Error> {
+    ) -> Result<i32, result::Error> {
         use crate::data::models::schema::orders::dsl::{orders};
         use crate::data::models::schema::order_products::dsl::order_products;
 
@@ -163,7 +163,7 @@ impl OrderRepo {
                     .execute(connection)
                     .await?;
 
-                Ok(())
+                Ok(new_id)
             }
             .scope_boxed()
         })

@@ -107,3 +107,28 @@ impl std::fmt::Display for ProductCategoryServiceError {
         }
     }
 }
+
+#[derive(Debug)]
+pub enum UserServiceError {
+    HashingError,
+    UserCreationFailed,
+    UserNotFound,
+    RoleCreationFailed,
+    RoleAssignmentFailed,
+    DatabaseError,
+}
+
+impl std::error::Error for UserServiceError {}
+
+impl std::fmt::Display for UserServiceError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UserServiceError::HashingError => write!(f, "Password hashing failed"),
+            UserServiceError::UserCreationFailed => write!(f, "User creation failed"),
+            UserServiceError::UserNotFound => write!(f, "User not found"),
+            UserServiceError::RoleCreationFailed => write!(f, "Role creation failed"),
+            UserServiceError::RoleAssignmentFailed => write!(f, "Role assignment failed"),
+            UserServiceError::DatabaseError => write!(f, "Database error"),
+        }
+    }
+}

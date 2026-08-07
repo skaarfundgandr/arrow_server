@@ -32,12 +32,14 @@ diesel::table! {
 diesel::table! {
     orders (order_id) {
         order_id -> Integer,
-        user_id -> Integer,
+        user_id -> Nullable<Integer>,
         total_amount -> Decimal,
         #[max_length = 50]
-        status -> Nullable<Varchar>,
+        status -> Varchar,
         created_at -> Nullable<Timestamp>,
         updated_at -> Nullable<Timestamp>,
+        #[max_length = 20]
+        payment_status -> Varchar,
     }
 }
 

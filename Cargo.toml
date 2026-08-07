@@ -26,6 +26,9 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 jsonwebtoken = { version = "10.2.0", features = ["rust_crypto"] }
 axum-extra = { version = "0.12.2", features = ["typed-header"] }
 serde_with = "3.16.1"
+hmac = "0.12.1"
+sha2 = "0.10.9"
+hex = "0.4.3"
 
 [dev-dependencies]
 http-body-util = "0.1.3"

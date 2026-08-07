@@ -14,6 +14,31 @@ impl ProductService {
         ProductService
     }
 
+    /// Gets all products without any permission check (public endpoint)
+    pub async fn get_all_products_public(
+        &self,
+    ) -> Result<Option<Vec<ProductResponse>>, ProductServiceError> {
+        let repo = ProductRepo::new();
+        let products = repo
+            .get_all()
+            .await
+            .map_err(|_| ProductServiceError::DatabaseError)?;
+
+        match products {
+            Some(prods) => {
+                let mut responses = Vec::new();
+                for p in prods {
+                    let mut response = ProductResponse::from(p);
+                    response.categories =
+                        self.get_categories_for_product(response.product_id).await?;
+                    responses.push(response);
+                }
+                Ok(Some(responses))
+            }
+            None => Ok(None),
+        }
+    }
+
     /// Gets all products (requires READ permission or Admin)
     pub async fn get_all_products(
         &self,
@@ -42,6 +67,27 @@ impl ProductService {
                     responses.push(response);
                 }
                 Ok(Some(responses))
+            }
+            None => Ok(None),
+        }
+    }
+
+    /// Gets a product by ID without any permission check (public endpoint)
+    pub async fn get_product_by_id_public(
+        &self,
+        product_id: i32,
+    ) -> Result<Option<ProductResponse>, ProductServiceError> {
+        let repo = ProductRepo::new();
+        let product = repo
+            .get_by_id(product_id)
+            .await
+            .map_err(|_| ProductServiceError::DatabaseError)?;
+
+        match product {
+            Some(p) => {
+                let mut response = ProductResponse::from(p);
+                response.categories = self.get_categories_for_product(response.product_id).await?;
+                Ok(Some(response))
             }
             None => Ok(None),
         }

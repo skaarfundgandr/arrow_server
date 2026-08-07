@@ -92,10 +92,10 @@ async fn test_create_order() {
     let repo = OrderRepo::new();
 
     let new_order = NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("20.00").unwrap(),
-        status: Some("pending".to_string()),
-    };
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("20.00").unwrap(),
+            status: "pending".to_string(),
+        };
     
     // Create with items
     let items = vec![(product_id, 2, BigDecimal::from(10))];
@@ -109,12 +109,12 @@ async fn test_create_order() {
         .expect("No orders found");
 
     assert_eq!(orders.len(), 1);
-    assert_eq!(orders[0].user_id, user_id);
+    assert_eq!(orders[0].user_id, Some(user_id));
     assert_eq!(
         orders[0].total_amount,
         BigDecimal::from_str("20.00").unwrap()
     );
-    assert_eq!(orders[0].status, Some("pending".to_string()));
+    assert_eq!(orders[0].status, "pending".to_string());
     
     // Check items
     let detailed = repo.attach_products(orders).await.expect("Failed to attach");
@@ -144,10 +144,10 @@ async fn test_get_order_by_id() {
     let repo = OrderRepo::new();
 
     let new_order = NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("10.00").unwrap(),
-        status: Some("confirmed".to_string()),
-    };
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("10.00").unwrap(),
+            status: "confirmed".to_string(),
+        };
 
     repo.create_with_items(new_order, vec![(product_id, 1, BigDecimal::from(10))])
         .await
@@ -168,7 +168,7 @@ async fn test_get_order_by_id() {
         .expect("Order not found by id");
 
     assert_eq!(fetched_order.order_id, order_id);
-    assert_eq!(fetched_order.user_id, user_id);
+    assert_eq!(fetched_order.user_id, Some(user_id));
 }
 
 #[tokio::test]
@@ -193,18 +193,18 @@ async fn test_get_orders_by_user_id() {
     let repo = OrderRepo::new();
 
     repo.create_with_items(NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("10.00").unwrap(),
-        status: Some("pending".to_string()),
-    }, vec![(product_id, 1, BigDecimal::from(10))])
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("10.00").unwrap(),
+            status: "pending".to_string(),
+        }, vec![(product_id, 1, BigDecimal::from(10))])
     .await
     .expect("Failed to add order1");
 
     repo.create_with_items(NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("30.00").unwrap(),
-        status: Some("completed".to_string()),
-    }, vec![(product_id, 3, BigDecimal::from(10))])
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("30.00").unwrap(),
+            status: "completed".to_string(),
+        }, vec![(product_id, 3, BigDecimal::from(10))])
     .await
     .expect("Failed to add order2");
 
@@ -258,10 +258,10 @@ async fn test_get_orders_by_role_name() {
     let repo = OrderRepo::new();
 
     repo.create_with_items(NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("10.00").unwrap(),
-        status: Some("pending".to_string()),
-    }, vec![(product_id, 1, BigDecimal::from(10))])
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("10.00").unwrap(),
+            status: "pending".to_string(),
+        }, vec![(product_id, 1, BigDecimal::from(10))])
     .await
     .expect("Failed to add order");
 
@@ -289,26 +289,26 @@ async fn test_get_orders_by_status() {
     let repo = OrderRepo::new();
 
     repo.create_with_items(NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("10.00").unwrap(),
-        status: Some("pending".to_string()),
-    }, vec![(product_id, 1, BigDecimal::from(10))])
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("10.00").unwrap(),
+            status: "pending".to_string(),
+        }, vec![(product_id, 1, BigDecimal::from(10))])
     .await
     .expect("Failed to add order1");
 
     repo.create_with_items(NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("20.00").unwrap(),
-        status: Some("completed".to_string()),
-    }, vec![(product_id, 2, BigDecimal::from(10))])
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("20.00").unwrap(),
+            status: "completed".to_string(),
+        }, vec![(product_id, 2, BigDecimal::from(10))])
     .await
     .expect("Failed to add order2");
 
     repo.create_with_items(NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("30.00").unwrap(),
-        status: Some("pending".to_string()),
-    }, vec![(product_id, 3, BigDecimal::from(10))])
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("30.00").unwrap(),
+            status: "pending".to_string(),
+        }, vec![(product_id, 3, BigDecimal::from(10))])
     .await
     .expect("Failed to add order3");
 
@@ -354,10 +354,10 @@ async fn test_update_order() {
     let repo = OrderRepo::new();
 
     let new_order = NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("10.00").unwrap(),
-        status: Some("pending".to_string()),
-    };
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("10.00").unwrap(),
+            status: "pending".to_string(),
+        };
 
     repo.create_with_items(new_order, vec![(product_id, 1, BigDecimal::from(10))])
         .await.expect("Failed to add order");
@@ -390,7 +390,7 @@ async fn test_update_order() {
         updated_order.total_amount,
         BigDecimal::from_str("50.00").unwrap()
     );
-    assert_eq!(updated_order.status, Some("completed".to_string()));
+    assert_eq!(updated_order.status, "completed".to_string());
 }
 
 #[tokio::test]
@@ -403,10 +403,10 @@ async fn test_update_order_partial() {
     let repo = OrderRepo::new();
 
     let new_order = NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("20.00").unwrap(),
-        status: Some("pending".to_string()),
-    };
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("20.00").unwrap(),
+            status: "pending".to_string(),
+        };
 
     repo.create_with_items(new_order, vec![(product_id, 2, BigDecimal::from(10))])
         .await.expect("Failed to add order");
@@ -440,7 +440,7 @@ async fn test_update_order_partial() {
         BigDecimal::from_str("20.00").unwrap(),
         "Total amount should remain unchanged"
     );
-    assert_eq!(updated_order.status, Some("shipped".to_string()));
+    assert_eq!(updated_order.status, "shipped".to_string());
 }
 
 #[tokio::test]
@@ -453,10 +453,10 @@ async fn test_delete_order() {
     let repo = OrderRepo::new();
 
     let new_order = NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("10.00").unwrap(),
-        status: Some("pending".to_string()),
-    };
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("10.00").unwrap(),
+            status: "pending".to_string(),
+        };
 
     repo.create_with_items(new_order, vec![(product_id, 1, BigDecimal::from(10))])
         .await.expect("Failed to add order");
@@ -486,18 +486,18 @@ async fn test_get_all_with_orders() {
     let repo = OrderRepo::new();
 
     repo.create_with_items(NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("10.00").unwrap(),
-        status: Some("pending".to_string()),
-    }, vec![(product_id, 1, BigDecimal::from(10))])
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("10.00").unwrap(),
+            status: "pending".to_string(),
+        }, vec![(product_id, 1, BigDecimal::from(10))])
     .await
     .expect("Failed to add order1");
 
     repo.create_with_items(NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("20.00").unwrap(),
-        status: Some("completed".to_string()),
-    }, vec![(product_id, 2, BigDecimal::from(10))])
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("20.00").unwrap(),
+            status: "completed".to_string(),
+        }, vec![(product_id, 2, BigDecimal::from(10))])
     .await
     .expect("Failed to add order2");
 

@@ -9,54 +9,29 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 
-// NOTE: All routes except get_all should only be accessible by admin users.
-/// Get all products
-pub async fn get_all_products(claims: AccessClaims) -> impl IntoResponse {
+// NOTE: Only write/delete operations require authentication. Reads are public.
+/// Get all products (public)
+pub async fn get_all_products() -> impl IntoResponse {
     let service = ProductService::new();
-    let roles = claims.roles.unwrap_or_default();
 
-    if roles.is_empty() {
-        return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-    }
-
-    for role_id in roles {
-        match service.get_all_products(role_id as i32).await {
-            Ok(products) => {
-                let response: Vec<ProductResponse> = products.unwrap_or_default();
-                return (StatusCode::OK, Json(response)).into_response();
-            }
-            Err(ProductServiceError::PermissionDenied) => continue,
-            Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+    match service.get_all_products_public().await {
+        Ok(products) => {
+            let response: Vec<ProductResponse> = products.unwrap_or_default();
+            (StatusCode::OK, Json(response)).into_response()
         }
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
     }
-
-    (StatusCode::FORBIDDEN, "Permission denied").into_response()
 }
 
-/// Get product by ID
-pub async fn get_product_by_id(
-    claims: AccessClaims,
-    Path(product_id): Path<i32>,
-) -> impl IntoResponse {
+/// Get product by ID (public)
+pub async fn get_product_by_id(Path(product_id): Path<i32>) -> impl IntoResponse {
     let service = ProductService::new();
-    let roles = claims.roles.unwrap_or_default();
 
-    if roles.is_empty() {
-        return (StatusCode::FORBIDDEN, "Permission denied").into_response();
+    match service.get_product_by_id_public(product_id).await {
+        Ok(Some(product)) => (StatusCode::OK, Json(product)).into_response(),
+        Ok(None) => (StatusCode::NOT_FOUND, "Product not found").into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
     }
-
-    for role_id in roles {
-        match service.get_product_by_id(product_id, role_id as i32).await {
-            Ok(Some(product)) => {
-                return (StatusCode::OK, Json(product)).into_response();
-            }
-            Ok(None) => return (StatusCode::NOT_FOUND, "Product not found").into_response(),
-            Err(ProductServiceError::PermissionDenied) => continue,
-            Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
-        }
-    }
-
-    (StatusCode::FORBIDDEN, "Permission denied").into_response()
 }
 
 /// Create a new product

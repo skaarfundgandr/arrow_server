@@ -8,27 +8,16 @@ use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 
-pub async fn get_categories(claims: AccessClaims) -> impl IntoResponse {
+pub async fn get_categories() -> impl IntoResponse {
     let service = ProductCategoryService::new();
 
-    if claims.roles.is_none() {
-        return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-    }
-    // Iterate through roles and return categories for the first role that has permission
-    for role in claims.roles.unwrap() {
-        match service.get_categories(role as i32).await {
-            Ok(categories) => {
-                let response = categories.unwrap_or_default();
-                return (StatusCode::OK, Json(response)).into_response();
-            }
-            Err(ProductCategoryServiceError::PermissionDenied) => continue,
-            Err(_) => {
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
-            }
+    match service.get_categories_public().await {
+        Ok(categories) => {
+            let response = categories.unwrap_or_default();
+            (StatusCode::OK, Json(response)).into_response()
         }
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
     }
-
-    (StatusCode::FORBIDDEN, "Permission denied").into_response()
 }
 
 pub async fn add_category(
@@ -203,17 +192,9 @@ pub async fn remove_product_from_category(
     (StatusCode::FORBIDDEN, "Permission denied").into_response()
 }
 
-pub async fn get_products_by_category(
-    claims: AccessClaims,
-    Path(category_name): Path<String>,
-) -> impl IntoResponse {
+pub async fn get_products_by_category(Path(category_name): Path<String>) -> impl IntoResponse {
     let service = ProductCategoryService::new();
     let category_repo = CategoryRepo::new();
-
-    if claims.roles.is_none() {
-        tracing::error!("Roles is none");
-        return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-    }
 
     let category_id = match category_repo.get_by_name(&category_name).await {
         Ok(Some(category)) => category.category_id,
@@ -227,21 +208,11 @@ pub async fn get_products_by_category(
         }
     };
 
-    for role in claims.roles.unwrap() {
-        match service
-            .get_products_by_category(role as i32, category_id)
-            .await
-        {
-            Ok(products) => {
-                return (StatusCode::OK, Json(products)).into_response();
-            }
-            Err(ProductCategoryServiceError::PermissionDenied) => continue,
-            Err(_) => {
-                tracing::error!("Failed to get products for category {}", category_id);
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
-            }
+    match service.get_products_by_category_public(category_id).await {
+        Ok(products) => (StatusCode::OK, Json(products)).into_response(),
+        Err(_) => {
+            tracing::error!("Failed to get products for category {}", category_id);
+            (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response()
         }
     }
-
-    (StatusCode::FORBIDDEN, "Permission denied").into_response()
 }

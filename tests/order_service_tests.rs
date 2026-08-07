@@ -110,7 +110,7 @@ async fn test_create_order_with_write_permission() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("write_user").await;
-    let role_id = create_role_with_permission("writer", RolePermissions::Write).await;
+    let _role_id = create_role_with_permission("writer", RolePermissions::Write).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -118,11 +118,10 @@ async fn test_create_order_with_write_permission() {
     let items = vec![(product_id, 2)];
 
     let result = service
-        .create_order(
-            user_id,
-            role_id,
-            items,
-        )
+            .create_order(
+                Some(user_id),
+                items,
+            )
         .await;
 
     assert!(
@@ -137,7 +136,7 @@ async fn test_create_order_with_admin_permission() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("admin_user").await;
-    let role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
+    let _role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -145,11 +144,10 @@ async fn test_create_order_with_admin_permission() {
     let items = vec![(product_id, 1)];
 
     let result = service
-        .create_order(
-            user_id,
-            role_id,
-            items,
-        )
+            .create_order(
+                Some(user_id),
+                items,
+            )
         .await;
 
     assert!(
@@ -164,7 +162,7 @@ async fn test_create_order_without_permission() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("read_only_user").await;
-    let role_id = create_role_with_permission("reader", RolePermissions::Read).await;
+    let _role_id = create_role_with_permission("reader", RolePermissions::Read).await;
     let product_id = create_test_product().await;
 
     let service = OrderService::new();
@@ -173,16 +171,14 @@ async fn test_create_order_without_permission() {
 
     let result = service
         .create_order(
-            user_id,
-            role_id,
+            Some(user_id),
             items,
         )
         .await;
 
-    assert_eq!(
-        result.err(),
-        Some(OrderServiceError::PermissionDenied),
-        "Should not be able to create order with READ permission"
+    assert!(
+        result.is_ok(),
+        "Order creation is public and must not require any permission"
     );
 }
 
@@ -192,7 +188,7 @@ async fn test_get_user_own_orders() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("order_viewer").await;
-    let write_role_id =
+    let _write_role_id =
         create_role_with_permission("writer", RolePermissions::Write).await;
     let product_id = create_test_product().await;
 
@@ -202,8 +198,7 @@ async fn test_get_user_own_orders() {
     let items = vec![(product_id, 1)];
     service
         .create_order(
-            user_id,
-            write_role_id,
+            Some(user_id),
             items,
         )
         .await
@@ -228,7 +223,7 @@ async fn test_get_other_user_orders_with_read_permission() {
     setup().await.expect("Setup failed");
 
     let user1_id = create_test_user("user1").await;
-    let write_role_id =
+    let _write_role_id =
         create_role_with_permission("writer1", RolePermissions::Write).await;
     let read_role_id =
         create_role_with_permission("reader2", RolePermissions::Read).await;
@@ -240,8 +235,7 @@ async fn test_get_other_user_orders_with_read_permission() {
     let items = vec![(product_id, 1)];
     service
         .create_order(
-            user1_id,
-            write_role_id,
+            Some(user1_id),
             items,
         )
         .await
@@ -270,20 +264,18 @@ async fn test_admin_get_all_orders() {
 
     // Create multiple orders
     service
-        .create_order(
-            user_id,
-            admin_role_id,
-            vec![(product_id, 1)],
-        )
+            .create_order(
+                Some(user_id),
+                vec![(product_id, 1)],
+            )
         .await
         .expect("Failed to create order 1");
 
     service
-        .create_order(
-            user_id,
-            admin_role_id,
-            vec![(product_id, 2)],
-        )
+            .create_order(
+                Some(user_id),
+                vec![(product_id, 2)],
+            )
         .await
         .expect("Failed to create order 2");
 
@@ -302,7 +294,7 @@ async fn test_read_permission_get_all_orders() {
     setup().await.expect("Setup failed");
 
     let user_id = create_test_user("reader").await;
-    let write_role_id =
+    let _write_role_id =
         create_role_with_permission("writer", RolePermissions::Write).await;
     let read_role_id = create_role_with_permission("reader", RolePermissions::Read).await;
     let product_id = create_test_product().await;
@@ -312,8 +304,7 @@ async fn test_read_permission_get_all_orders() {
     // Create an order first
     service
         .create_order(
-            user_id,
-            write_role_id,
+            Some(user_id),
             vec![(product_id, 1)],
         )
         .await
@@ -343,11 +334,10 @@ async fn test_cancel_own_pending_order() {
 
     // Create order
     service
-        .create_order(
-            user_id,
-            write_role_id,
-            vec![(product_id, 1)],
-        )
+            .create_order(
+                Some(user_id),
+                vec![(product_id, 1)],
+            )
         .await
         .expect("Failed to create order");
 
@@ -371,7 +361,7 @@ async fn test_cancel_own_pending_order() {
         .expect("Failed to get order")
         .expect("Order not found");
 
-    assert_eq!(cancelled_order.status, Some("Cancelled".to_string()));
+    assert_eq!(cancelled_order.status, "Cancelled".to_string());
 }
 
 #[tokio::test]
@@ -380,7 +370,7 @@ async fn test_cancel_other_user_order_denied() {
     setup().await.expect("Setup failed");
 
     let user1_id = create_test_user("owner").await;
-    let write_role1_id =
+    let _write_role1_id =
         create_role_with_permission("writer1", RolePermissions::Write).await;
     let write_role2_id =
         create_role_with_permission("writer2", RolePermissions::Write).await;
@@ -393,8 +383,7 @@ async fn test_cancel_other_user_order_denied() {
     // Create order for user1
     service
         .create_order(
-            user1_id,
-            write_role1_id,
+            Some(user1_id),
             vec![(product_id, 1)],
         )
         .await
@@ -433,11 +422,10 @@ async fn test_write_permission_update_order_status() {
 
     // Create order
     service
-        .create_order(
-            user_id,
-            write_role_id,
-            vec![(product_id, 1)],
-        )
+            .create_order(
+                Some(user_id),
+                vec![(product_id, 1)],
+            )
         .await
         .expect("Failed to create order");
 
@@ -460,7 +448,7 @@ async fn test_write_permission_update_order_status() {
         .expect("Failed to get order")
         .expect("Order not found");
 
-    assert_eq!(updated_order.status, Some("Accepted".to_string()));
+    assert_eq!(updated_order.status, "Accepted".to_string());
 
     // Update status to Completed
     service
@@ -474,7 +462,7 @@ async fn test_write_permission_update_order_status() {
         .expect("Failed to get order")
         .expect("Order not found");
 
-    assert_eq!(completed_order.status, Some("Completed".to_string()));
+    assert_eq!(completed_order.status, "Completed".to_string());
 }
 
 #[tokio::test]
@@ -492,11 +480,10 @@ async fn test_non_admin_update_status_denied() {
 
     // Create order
     service
-        .create_order(
-            user_id,
-            write_role_id,
-            vec![(product_id, 1)],
-        )
+            .create_order(
+                Some(user_id),
+                vec![(product_id, 1)],
+            )
         .await
         .expect("Failed to create order");
 
@@ -535,20 +522,18 @@ async fn test_get_orders_by_status() {
 
     // Create orders
     service
-        .create_order(
-            user_id,
-            write_role_id,
-            vec![(product_id, 1)],
-        )
+            .create_order(
+                Some(user_id),
+                vec![(product_id, 1)],
+            )
         .await
         .expect("Failed to create order 1");
 
     service
-        .create_order(
-            user_id,
-            write_role_id,
-            vec![(product_id, 2)],
-        )
+            .create_order(
+                Some(user_id),
+                vec![(product_id, 2)],
+            )
         .await
         .expect("Failed to create order 2");
 
@@ -595,11 +580,10 @@ async fn test_delete_order_admin_only() {
 
     // Create order
     service
-        .create_order(
-            user_id,
-            admin_role_id,
-            vec![(product_id, 1)],
-        )
+            .create_order(
+                Some(user_id),
+                vec![(product_id, 1)],
+            )
         .await
         .expect("Failed to create order");
 
@@ -640,11 +624,10 @@ async fn test_delete_order_non_admin_denied() {
 
     // Create order
     service
-        .create_order(
-            user_id,
-            write_role_id,
-            vec![(product_id, 1)],
-        )
+            .create_order(
+                Some(user_id),
+                vec![(product_id, 1)],
+            )
         .await
         .expect("Failed to create order");
 

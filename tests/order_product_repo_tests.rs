@@ -86,10 +86,10 @@ async fn create_test_order(user_id: i32, product_id: i32) -> i32 {
     let repo = OrderRepo::new();
 
     let new_order = NewOrder {
-        user_id,
-        total_amount: BigDecimal::from_str("10.00").unwrap(),
-        status: Some("pending".to_string()),
-    };
+            user_id: Some(user_id),
+            total_amount: BigDecimal::from_str("10.00").unwrap(),
+            status: "pending".to_string(),
+        };
 
     // We use create_with_items to ensure the order is created validly, 
     // but for some tests we might manually add more items later.

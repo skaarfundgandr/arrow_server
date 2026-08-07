@@ -11,19 +11,20 @@ use diesel::prelude::*;
 #[diesel(treat_none_as_null = true)]
 pub struct Order {
     pub order_id: i32,
-    pub user_id: i32,
+    pub user_id: Option<i32>,
     pub total_amount: BigDecimal,
-    pub status: Option<String>,
+    pub status: String,
     pub created_at: Option<chrono::NaiveDateTime>,
     pub updated_at: Option<chrono::NaiveDateTime>,
+    pub payment_status: String,
 }
 
 #[derive(Insertable, PartialEq, Debug)]
 #[diesel(table_name = orders)]
 pub struct NewOrder {
-    pub user_id: i32,
+    pub user_id: Option<i32>,
     pub total_amount: BigDecimal,
-    pub status: Option<String>,
+    pub status: String,
 }
 
 #[derive(AsChangeset, PartialEq, Debug)]

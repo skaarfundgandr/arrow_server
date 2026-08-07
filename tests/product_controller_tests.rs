@@ -508,3 +508,53 @@ async fn test_update_product_categories() {
     assert_eq!(cats.len(), 1);
     assert_eq!(cats[0].name, "CatA");
 }
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_get_all_products_public_no_auth() {
+    setup().await.expect("Setup failed");
+    let _ = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let _ = create_test_product("Product 2", BigDecimal::from(20)).await;
+
+    let app = app();
+
+    // No Authorization header -> public read still works
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/products")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let products: Vec<ProductResponse> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(products.len(), 2);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_get_product_by_id_public_no_auth() {
+    setup().await.expect("Setup failed");
+    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+
+    let app = app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/products/{}", pid))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let product: ProductResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(product.name, "Product 1");
+}

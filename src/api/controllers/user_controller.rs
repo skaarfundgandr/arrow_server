@@ -1,15 +1,17 @@
+use crate::api::config::Config;
 use crate::api::controllers::dto::login_dto::LoginDTO;
 use crate::api::controllers::dto::role_dto::RoleDTO;
 use crate::api::controllers::dto::user_dto::{NewUserDTO, UpdateUserDTO, UserDTO, UserQueryParams};
 use crate::api::response::LoginResponse;
 use crate::data::models::user::{NewUser, UpdateUser, User};
-use crate::data::models::roles::{NewRole, RolePermissions};
+use crate::data::models::roles::RolePermissions;
 use crate::data::repos::implementors::user_repo::UserRepo;
 use crate::data::repos::implementors::role_repo::RoleRepo;
 use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::security::auth::AuthService;
 use crate::security::jwt::{AccessClaims, JwtService};
+use crate::services::user_service::UserService;
 use axum::Json;
 use axum::extract::{Path, Query};
 use axum::http::StatusCode;
@@ -30,25 +32,19 @@ async fn check_is_admin(role_ids: &[usize]) -> bool {
 
 /// Register a new user
 /// Logic:
-/// - If DB is empty: Allow registration, make user ADMIN.
-/// - If DB not empty: Return 403 (Public registration closed).
+/// - The admin username is reserved (409 Conflict).
+/// - Every registered user gets the CUSTOMER role.
 pub async fn register_user(Json(new_user): Json<NewUserDTO>) -> impl IntoResponse {
+    let config = Config::default();
+    if new_user.username == config.admin_username {
+        return (StatusCode::CONFLICT, "Username is reserved").into_response();
+    }
+
     let auth = AuthService::new();
     let user_repo = UserRepo::new();
-    let role_repo = RoleRepo::new();
     let user_role_repo = UserRoleRepo::new();
+    let user_service = UserService::new();
     let jwt_service = JwtService::new();
-
-    // 1. Check if first user
-    let is_first_user = match user_repo.get_all().await {
-        Ok(Some(users)) => users.is_empty(),
-        Ok(None) => true,
-        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
-    };
-
-    if !is_first_user {
-        return (StatusCode::FORBIDDEN, "Public registration is closed.").into_response();
-    }
 
     let hashed_password = match auth.hash_password(&new_user.password).await {
         Ok(h) => h,
@@ -67,13 +63,13 @@ pub async fn register_user(Json(new_user): Json<NewUserDTO>) -> impl IntoRespons
         password: hashed_password,
     };
 
-    // 2. Create User
+    // 1. Create User
     if let Err(e) = user_repo.add(NewUser::from(&user_create_dto)).await {
         tracing::error!("Error creating user: {}", e);
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response();
     }
 
-    // 3. Fetch created user
+    // 2. Fetch created user
     let user = match user_repo.get_by_username(&new_user.username).await {
         Ok(Some(u)) => u,
         _ => {
@@ -85,42 +81,22 @@ pub async fn register_user(Json(new_user): Json<NewUserDTO>) -> impl IntoRespons
         }
     };
 
-    // 4. Assign Admin Role if first user
-    if is_first_user {
-        let role_name = "ADMIN";
-        
-        let role_result = match role_repo.get_by_name(role_name).await {
-            Ok(Some(r)) => Some(r),
-            Ok(None) => {
-                // Create role
-                let new_role = NewRole {
-                    name: role_name,
-                    description: Some("System Administrator"),
-                };
-                if let Err(e) = role_repo.add(new_role).await {
-                    tracing::error!("Failed to create admin role: {}", e);
-                    None
-                } else {
-                    // Fetch created role and set permissions
-                     match role_repo.get_by_name(role_name).await {
-                        Ok(Some(r)) => {
-                            let _ = role_repo.set_permissions(r.role_id, RolePermissions::Admin).await;
-                            Some(r)
-                        },
-                        _ => None
-                     }
-                }
-            },
-            Err(_) => None,
-        };
-
-        if let Some(role) = role_result
-            && let Err(e) = user_role_repo.add_user_role(user.user_id, role.role_id).await {
-            tracing::error!("Failed to assign admin role: {}", e);
+    // 3. Assign CUSTOMER role (created if missing)
+    match user_service
+        .ensure_role("CUSTOMER", RolePermissions::Write)
+        .await
+    {
+        Ok(role) => {
+            if let Err(e) = user_role_repo.add_user_role(user.user_id, role.role_id).await {
+                tracing::error!("Failed to assign customer role: {}", e);
+            }
+        }
+        Err(e) => {
+            tracing::error!("Failed to ensure CUSTOMER role: {}", e);
         }
     }
 
-    // 5. Generate Token
+    // 4. Generate Token
     let user_dto = user_to_dto(&user, true).await; // Include ID for own profile
     match jwt_service.generate_token(user_dto).await {
         Ok(token) => {

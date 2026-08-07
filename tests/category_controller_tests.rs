@@ -400,6 +400,60 @@ async fn test_get_products_by_category_name_success() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn test_get_categories_public_no_auth() {
+    setup().await.expect("Setup failed");
+    let _ = create_test_category("Electronics").await;
+    let _ = create_test_category("Books").await;
+
+    let app_router = app();
+
+    // No Authorization header -> public read still works
+    let response = app_router
+        .oneshot(
+            Request::builder()
+                .uri("/categories")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let categories: Vec<CategoryResponse> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(categories.len(), 2);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_get_products_by_category_public_no_auth() {
+    setup().await.expect("Setup failed");
+
+    let cat_id = create_test_category("Electronics").await;
+    let prod_id = create_test_product("Laptop", BigDecimal::from(1000)).await;
+    assign_product_to_category(prod_id, cat_id).await;
+
+    let app_router = app();
+
+    let response = app_router
+        .oneshot(
+            Request::builder()
+                .uri("/categories/Electronics/products")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let products: Vec<ProductResponse> = serde_json::from_slice(&body).unwrap();
+    assert_eq!(products.len(), 1);
+    assert_eq!(products[0].name, "Laptop");
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn test_get_products_by_category_name_not_found() {
     setup().await.expect("Setup failed");
     let (_, token) = create_user_with_role("reader", "pass", "READER", RolePermissions::Read).await;

@@ -1,3 +1,4 @@
+use arrow_server_lib::api::config::Config;
 use arrow_server_lib::api::controllers::dto::user_dto::UserDTO;
 use arrow_server_lib::api::controllers::user_controller::{
     delete_user, edit_user, get_all_users, get_user, get_user_by_name, login, refresh,
@@ -12,6 +13,7 @@ use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
 use arrow_server_lib::security::jwt::JwtService;
+use arrow_server_lib::services::user_service::UserService;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -211,11 +213,8 @@ async fn test_register_user_success() {
 
 #[tokio::test]
 #[serial_test::serial]
-async fn test_register_user_forbidden_when_db_not_empty() {
+async fn test_register_user_assigns_customer_role() {
     setup().await.expect("Setup failed");
-
-    // Create initial user (which becomes admin)
-    let _ = create_test_user("existinguser", "password").await;
 
     let app = app();
 
@@ -227,7 +226,7 @@ async fn test_register_user_forbidden_when_db_not_empty() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&json!({
-                        "username": "testuser",
+                        "username": "customer1",
                         "password": "testpassword123"
                     }))
                     .unwrap(),
@@ -237,8 +236,143 @@ async fn test_register_user_forbidden_when_db_not_empty() {
         .await
         .unwrap();
 
-    // Should be forbidden since DB is not empty
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // The CUSTOMER role must be auto-created and assigned
+    let repo = UserRepo::new();
+    let user = repo
+        .get_by_username("customer1")
+        .await
+        .expect("Query failed")
+        .expect("User not found");
+    let roles = UserRoleRepo::new()
+        .get_roles_by_user_id(user.user_id)
+        .await
+        .expect("Failed to get roles");
+    assert_eq!(roles.len(), 1);
+    assert_eq!(roles[0].name, "CUSTOMER");
+    assert!(roles[0].has_permission(RolePermissions::Write));
+    assert!(!roles[0].has_permission(RolePermissions::Admin));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_register_admin_username_conflict() {
+    setup().await.expect("Setup failed");
+
+    let admin_username = Config::default().admin_username;
+
+    let app = app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/register")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "username": admin_username,
+                        "password": "testpassword123"
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_seed_admin_from_env_idempotent() {
+    setup().await.expect("Setup failed");
+
+    let user_service = UserService::new();
+    user_service
+        .seed_admin_from_env()
+        .await
+        .expect("Seeding failed");
+    user_service
+        .seed_admin_from_env()
+        .await
+        .expect("Second seeding failed");
+
+    // Exactly one admin user
+    let repo = UserRepo::new();
+    let users = repo.get_all().await.expect("Query failed").unwrap();
+    let admin_users: Vec<_> = users
+        .iter()
+        .filter(|u| u.username == Config::default().admin_username)
+        .collect();
+    assert_eq!(admin_users.len(), 1);
+
+    // Admin role exists with ADMIN permission and is assigned
+    let admin = admin_users[0];
+    let roles = UserRoleRepo::new()
+        .get_roles_by_user_id(admin.user_id)
+        .await
+        .expect("Failed to get roles");
+    assert_eq!(roles.len(), 1);
+    assert_eq!(roles[0].name, "ADMIN");
+    assert!(roles[0].has_permission(RolePermissions::Admin));
+    assert!(roles[0].has_permission(RolePermissions::Read));
+    assert!(roles[0].has_permission(RolePermissions::Write));
+    assert!(roles[0].has_permission(RolePermissions::Delete));
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_login_env_admin_credentials() {
+    setup().await.expect("Setup failed");
+
+    UserService::new()
+        .seed_admin_from_env()
+        .await
+        .expect("Seeding failed");
+
+    let config = Config::default();
+
+    let app = app();
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "username": config.admin_username,
+                        "password": config.admin_password
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(body["token"].is_string());
+
+    // Seeded admin has the ADMIN role
+    let user = UserRepo::new()
+        .get_by_username(&config.admin_username)
+        .await
+        .expect("Query failed")
+        .expect("Admin user not found");
+    let roles = UserRoleRepo::new()
+        .get_roles_by_user_id(user.user_id)
+        .await
+        .expect("Failed to get roles");
+    assert_eq!(roles.len(), 1);
+    assert_eq!(roles[0].name, "ADMIN");
 }
 
 #[tokio::test]

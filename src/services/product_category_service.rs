@@ -17,6 +17,34 @@ impl ProductCategoryService {
         ProductCategoryService {}
     }
 
+    /// Gets all categories without any permission check (public endpoint).
+    /// Category ids and timestamps are hidden for non-admin access.
+    pub async fn get_categories_public(
+        &self,
+    ) -> Result<Option<Vec<CategoryResponse>>, ProductCategoryServiceError> {
+        let repo = CategoryRepo::new();
+
+        let categories = repo
+            .get_all()
+            .await
+            .map_err(|_| ProductCategoryServiceError::DatabaseError)?;
+
+        let mut res: Option<Vec<CategoryResponse>> =
+            categories.map(|cats| cats.into_iter().map(|c| c.into()).collect());
+
+        if let Some(categories) = res.as_mut() {
+            categories.iter_mut().for_each(|cat| {
+                cat.category_id = None;
+                cat.created_at = None;
+                cat.updated_at = None;
+            });
+        } else {
+            return Ok(Some(vec![]));
+        }
+
+        Ok(res)
+    }
+
     pub async fn get_categories(
         &self,
         role_id: i32,
@@ -255,6 +283,21 @@ impl ProductCategoryService {
         repo.delete(category_id)
             .await
             .map_err(|_| ProductCategoryServiceError::DatabaseError)
+    }
+
+    /// Gets products for a category without any permission check (public endpoint)
+    pub async fn get_products_by_category_public(
+        &self,
+        category_id: i32,
+    ) -> Result<Option<Vec<ProductResponse>>, ProductCategoryServiceError> {
+        let repo = ProductCategoryRepo::new();
+
+        let products = repo
+            .get_products_by_category_id(category_id)
+            .await
+            .map_err(|_| ProductCategoryServiceError::DatabaseError)?;
+
+        Ok(products.map(|prods| prods.into_iter().map(|p| p.into()).collect()))
     }
 
     pub async fn get_products_by_category(
