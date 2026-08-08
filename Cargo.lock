@@ -62,6 +62,7 @@ dependencies = [
  "http-body-util",
  "jsonwebtoken",
  "once_cell",
+ "qrcode",
  "serde",
  "serde_json",
  "serde_with",
@@ -1606,6 +1607,12 @@ checksum = "5ee95bc4ef87b8d5ba32e8b7714ccc834865276eab0aed5c9958d00ec45f49e8"
 dependencies = [
  "unicode-ident",
 ]
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quote"

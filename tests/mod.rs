@@ -13,6 +13,8 @@ pub mod product_repo_tests;
 #[cfg(test)]
 pub mod product_service_tests;
 #[cfg(test)]
+pub mod qr_controller_tests;
+#[cfg(test)]
 pub mod role_controller_tests;
 #[cfg(test)]
 pub mod user_controller_tests;

@@ -1,5 +1,6 @@
 use crate::api::routes::{
-    auth_routes, category_routes, order_routes, product_routes, role_routes, user_routes,
+    auth_routes, category_routes, order_routes, product_routes, qr_routes, role_routes,
+    user_routes,
 };
 use axum::body::Body;
 use axum::extract::Request;
@@ -26,6 +27,7 @@ pub async fn start() {
         .nest("/api/v1/products", product_routes::routes())
         .nest("/api/v1/categories", category_routes::routes())
         .nest("/api/v1/orders", order_routes::routes())
+        .nest("/api/v1/qr", qr_routes::routes())
         .with_state::<()>(())
         .layer(cors_layer)
         .layer(middleware::from_fn(logging_middleware));

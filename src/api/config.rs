@@ -12,6 +12,7 @@ pub struct Config {
     pub qr_signing_secret: String,
     pub order_link_ttl_minutes: u64,
     pub api_base_url: String,
+    pub ordering_base_url: String,
     pub max_payment_amount: BigDecimal,
 }
 
@@ -46,6 +47,8 @@ static CONFIG: Lazy<Config> = Lazy::new(|| {
         .expect("ORDER_LINK_EXPIRATION_MINUTES must be a valid u64");
     let api_base_url = std::env::var("API_BASE_URL")
         .unwrap_or_else(|_| "http://localhost:3000".to_string());
+    let ordering_base_url = std::env::var("ORDERING_BASE_URL")
+        .unwrap_or_else(|_| format!("{}/api/v1/products", api_base_url));
     let max_payment_amount = std::env::var("MAX_PAYMENT_AMOUNT")
         .unwrap_or_else(|_| "1000.00".to_string())
         .parse()
@@ -61,6 +64,7 @@ static CONFIG: Lazy<Config> = Lazy::new(|| {
         qr_signing_secret,
         order_link_ttl_minutes,
         api_base_url,
+        ordering_base_url,
         max_payment_amount,
     }
 });
