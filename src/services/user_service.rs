@@ -40,10 +40,17 @@ impl UserService {
             username: &config.admin_username,
             password_hash: &hashed,
         };
-        user_repo
-            .add(new_user)
-            .await
-            .map_err(|_| UserServiceError::UserCreationFailed)?;
+        if user_repo.add(new_user).await.is_err() {
+            // Concurrent seed: another instance may have created the user
+            // between our existence check and this insert.
+            let existing = user_repo
+                .get_by_username(&config.admin_username)
+                .await
+                .map_err(|_| UserServiceError::DatabaseError)?;
+            if existing.is_none() {
+                return Err(UserServiceError::UserCreationFailed);
+            }
+        }
 
         let user = user_repo
             .get_by_username(&config.admin_username)
@@ -53,10 +60,21 @@ impl UserService {
 
         let role = self.ensure_role("ADMIN", RolePermissions::Admin).await?;
 
-        UserRoleRepo::new()
+        if let Err(_e) = UserRoleRepo::new()
             .add_user_role(user.user_id, role.role_id)
             .await
-            .map_err(|_| UserServiceError::RoleAssignmentFailed)?;
+        {
+            // The role may already be assigned by a concurrent seed.
+            let assigned = UserRoleRepo::new()
+                .get_roles_by_user_id(user.user_id)
+                .await
+                .map_err(|_| UserServiceError::DatabaseError)?;
+            if assigned.iter().any(|r| r.role_id == role.role_id) {
+                tracing::info!("Admin user '{}' already seeded", config.admin_username);
+                return Ok(());
+            }
+            return Err(UserServiceError::RoleAssignmentFailed);
+        }
 
         tracing::info!("Admin user '{}' seeded", config.admin_username);
         Ok(())

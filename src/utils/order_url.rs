@@ -48,7 +48,7 @@ pub fn build_order_url(order_id: i32) -> String {
 /// `Err(OrderUrlError::Expired)` when `exp` is in the past.
 pub fn verify_order_url(order_id: i32, exp: u64, sig: &str) -> Result<(), OrderUrlError> {
     let now = chrono::Utc::now().timestamp() as u64;
-    if now > exp {
+    if now >= exp {
         return Err(OrderUrlError::Expired);
     }
 

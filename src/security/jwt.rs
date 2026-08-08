@@ -55,6 +55,17 @@ impl JwtService {
         token
     }
 
+    /// Encodes a JWT from arbitrary claims (used by tests to craft tokens,
+    /// e.g. for users that do not exist in the database).
+    pub async fn encode_claims(&self, claims: &AccessClaims) -> Result<String, AuthError> {
+        jsonwebtoken::encode(
+            &jsonwebtoken::Header::default(),
+            claims,
+            &jsonwebtoken::EncodingKey::from_secret(Config::default().jwt_secret.as_ref()),
+        )
+        .map_err(|_| AuthError::TokenCreationError)
+    }
+
     pub async fn decode_token<T: for<'de> Deserialize<'de>>(
         &self,
         token: &str,

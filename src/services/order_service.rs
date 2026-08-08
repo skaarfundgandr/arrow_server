@@ -58,6 +58,10 @@ impl OrderService {
         user_id: Option<i32>,
         items: Vec<(i32, i32)>, // product_id, quantity
     ) -> Result<i32, OrderServiceError> {
+        if items.iter().any(|&(_, qty)| qty <= 0) {
+            return Err(OrderServiceError::InvalidOrderItems);
+        }
+
         let product_repo = crate::data::repos::implementors::product_repo::ProductRepo::new();
         let mut order_items = Vec::new();
         let mut total_amount = BigDecimal::from(0);
@@ -101,6 +105,16 @@ impl OrderService {
             return Err(OrderServiceError::PermissionDenied);
         }
 
+        self.get_own_orders(target_user_id).await
+    }
+
+    /// Gets all orders for a specific user without any permission check.
+    /// Used for the self-service path, where the controller has already
+    /// proven that the caller IS the target user.
+    pub async fn get_own_orders(
+        &self,
+        target_user_id: i32,
+    ) -> Result<Option<Vec<(Order, Vec<(OrderProduct, Product)>)>>, OrderServiceError> {
         let repo = OrderRepo::new();
         let orders = repo.get_by_user_id(target_user_id)
             .await
@@ -206,6 +220,13 @@ impl OrderService {
             return Err(OrderServiceError::PermissionDenied);
         }
 
+        self.cancel_order_as_owner(order_id).await
+    }
+
+    /// Cancels an order (status -> Cancelled) without any permission check.
+    /// Used for the JWT-owner path, where the controller has already proven
+    /// that the caller owns the order.
+    pub async fn cancel_order_as_owner(&self, order_id: i32) -> Result<(), OrderServiceError> {
         let repo = OrderRepo::new();
 
         let update = UpdateOrder {
@@ -282,16 +303,22 @@ impl OrderService {
             ("paid".to_string(), "Payment successful".to_string())
         };
 
-        let update = UpdateOrder {
-            user_id: None,
-            total_amount: None,
-            status: None,
-            payment_status: Some(&final_status),
-        };
-
-        repo.update(order_id, update)
+        let affected = repo
+            .set_payment_status(order_id, &final_status)
             .await
             .map_err(|_| OrderServiceError::OrderUpdateFailed)?;
+
+        if affected == 0 {
+            // Payment status changed concurrently: re-check and report a conflict.
+            let current = repo
+                .get_by_id(order_id)
+                .await
+                .map_err(|_| OrderServiceError::DatabaseError)?;
+            if current.is_none() {
+                return Err(OrderServiceError::OrderNotFound);
+            }
+            return Err(OrderServiceError::PaymentConflict);
+        }
 
         Ok((final_status, message))
     }

@@ -1,5 +1,7 @@
 use arrow_server_lib::api::controllers::dto::user_dto::UserDTO;
-use arrow_server_lib::api::controllers::order_controller::{create_order, pay_order};
+use arrow_server_lib::api::controllers::order_controller::{
+    cancel_order, create_order, get_user_orders_by_name, pay_order,
+};
 use arrow_server_lib::api::response::{CreateOrderResponse, PayOrderResponse};
 use arrow_server_lib::data::database::Database;
 use arrow_server_lib::data::models::product::NewProduct;
@@ -11,12 +13,12 @@ use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
 use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
-use arrow_server_lib::security::jwt::JwtService;
+use arrow_server_lib::security::jwt::{AccessClaims, JwtService};
 use arrow_server_lib::utils::order_url::sign_order_url;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use axum::routing::post;
+use axum::routing::{get, post};
 use bigdecimal::BigDecimal;
 use chrono;
 use diesel::result;
@@ -160,10 +162,35 @@ async fn create_guest_order(app: &Router, pid: i32, quantity: i32) -> i32 {
     created.order.order_id
 }
 
+async fn create_order_with_quantity(pid: i32, quantity: i32) -> axum::response::Response {
+    app().oneshot(
+        Request::builder()
+            .method("POST")
+            .uri("/orders")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                serde_json::to_vec(&json!({
+                    "products": [
+                        {
+                            "product_id": pid,
+                            "quantity": quantity
+                        }
+                    ]
+                }))
+                .unwrap(),
+            ))
+            .unwrap(),
+    )
+    .await
+    .unwrap()
+}
+
 fn app() -> Router {
     Router::new()
         .route("/orders", post(create_order))
         .route("/orders/{id}/pay", post(pay_order))
+        .route("/orders/{id}/cancel", post(cancel_order))
+        .route("/orders/user/{username}", get(get_user_orders_by_name))
 }
 
 #[tokio::test]
@@ -345,4 +372,290 @@ async fn test_pay_order_already_paid_conflict() {
         .unwrap();
 
     assert_eq!(response.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_create_order_zero_quantity_bad_request() {
+    setup().await.expect("Setup failed");
+    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+
+    let response = create_order_with_quantity(pid, 0).await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_create_order_negative_quantity_bad_request() {
+    setup().await.expect("Setup failed");
+    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+
+    let response = create_order_with_quantity(pid, -1).await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_pay_order_exact_max_amount_paid() {
+    setup().await.expect("Setup failed");
+    let pid = create_test_product("Max Amount Product", "1000.00".parse().unwrap()).await;
+
+    let app = app();
+    let order_id = create_guest_order(&app, pid, 1).await;
+
+    let exp = chrono::Utc::now().timestamp() as u64 + 3600;
+    let sig = sign_order_url(order_id, exp);
+    let url = format!("/orders/{}/pay?exp={}&sig={}", order_id, exp, sig);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(url)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let pay: PayOrderResponse = serde_json::from_slice(&body).unwrap();
+    assert_eq!(pay.payment_status, "paid");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_pay_order_tampered_signature_bad_request() {
+    setup().await.expect("Setup failed");
+    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+
+    let app = app();
+    let order_id = create_guest_order(&app, pid, 1).await;
+
+    let exp = chrono::Utc::now().timestamp() as u64 + 3600;
+    let url = format!("/orders/{}/pay?exp={}&sig=deadbeef", order_id, exp);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(url)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_pay_order_expired_url_gone() {
+    setup().await.expect("Setup failed");
+    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+
+    let app = app();
+    let order_id = create_guest_order(&app, pid, 1).await;
+
+    let past_exp = chrono::Utc::now().timestamp() as u64 - 60;
+    let sig = sign_order_url(order_id, past_exp);
+    let url = format!("/orders/{}/pay?exp={}&sig={}", order_id, past_exp, sig);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(url)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::GONE);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_cancel_guest_order_by_admin() {
+    setup().await.expect("Setup failed");
+    let (_, admin_token) =
+        create_user_with_role("adminuser", "pass", "ADMIN", RolePermissions::Admin).await;
+    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+
+    let app = app();
+    let order_id = create_guest_order(&app, pid, 1).await;
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/orders/{}/cancel", order_id))
+                .header("Authorization", format!("Bearer {}", admin_token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_cancel_own_order_read_only_owner_success() {
+    setup().await.expect("Setup failed");
+    let (_, owner_token) =
+        create_user_with_role("readowner", "pass", "READOWNER", RolePermissions::Read).await;
+    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+
+    let app = app();
+
+    // Create order as the read-only owner
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/orders")
+                .header("Authorization", format!("Bearer {}", owner_token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "products": [
+                            {
+                                "product_id": pid,
+                                "quantity": 1
+                            }
+                        ]
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let created: CreateOrderResponse = serde_json::from_slice(&body).unwrap();
+    let order_id = created.order.order_id;
+
+    // Owner with only READ permission cancels own order
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/orders/{}/cancel", order_id))
+                .header("Authorization", format!("Bearer {}", owner_token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_get_own_orders_read_only_success() {
+    setup().await.expect("Setup failed");
+    let (_, owner_token) =
+        create_user_with_role("readviewer", "pass", "READVIEWER", RolePermissions::Read).await;
+    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+
+    let app = app();
+
+    // Create order as the read-only owner
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/orders")
+                .header("Authorization", format!("Bearer {}", owner_token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "products": [
+                            {
+                                "product_id": pid,
+                                "quantity": 1
+                            }
+                        ]
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CREATED);
+
+    // Self-service fetch of own orders with only READ permission
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/orders/user/readviewer")
+                .header("Authorization", format!("Bearer {}", owner_token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let orders: Vec<arrow_server_lib::api::response::OrderResponse> =
+        serde_json::from_slice(&body).unwrap();
+    assert_eq!(orders.len(), 1);
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn test_create_order_token_of_deleted_user_unauthorized() {
+    setup().await.expect("Setup failed");
+    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+
+    // Valid-format JWT whose subject does not exist in the users table
+    let now = chrono::Utc::now().timestamp() as usize;
+    let claims = AccessClaims {
+        sub: 999_999,
+        iat: now,
+        exp: now + 3600,
+        roles: None,
+    };
+    let token = JwtService::new()
+        .encode_claims(&claims)
+        .await
+        .expect("Failed to craft token");
+
+    let response = app()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/orders")
+                .header("Authorization", format!("Bearer {}", token))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "products": [
+                            {
+                                "product_id": pid,
+                                "quantity": 1
+                            }
+                        ]
+                    }))
+                    .unwrap(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 }

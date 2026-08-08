@@ -170,6 +170,41 @@ impl OrderRepo {
         .await
     }
 
+    /// Atomically sets `payment_status` for an order, but only while it is
+    /// still `unpaid` or `failed`. Returns the number of affected rows (0 when
+    /// the payment status changed concurrently).
+    pub async fn set_payment_status(
+        &self,
+        order_id: i32,
+        new_status: &str,
+    ) -> Result<usize, result::Error> {
+        use crate::data::models::schema::orders::dsl::orders;
+        use crate::data::models::schema::orders::{order_id as order_id_col, payment_status};
+
+        let db = Database::new().await;
+        let mut conn = db.get_connection().await.map_err(|e| {
+            result::Error::DatabaseError(
+                result::DatabaseErrorKind::UnableToSendCommand,
+                Box::new(e.to_string()),
+            )
+        })?;
+
+        conn.transaction(|connection| {
+            async move {
+                diesel::update(
+                    orders
+                        .filter(order_id_col.eq(order_id))
+                        .filter(payment_status.eq_any(["unpaid", "failed"])),
+                )
+                .set(payment_status.eq(new_status))
+                .execute(connection)
+                .await
+            }
+            .scope_boxed()
+        })
+        .await
+    }
+
     pub async fn attach_products(
         &self,
         orders_list: Vec<Order>,

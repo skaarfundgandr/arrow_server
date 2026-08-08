@@ -2,6 +2,7 @@ use crate::api::extractors::OptionalAccessClaims;
 use crate::api::request::{CreateOrderRequest, UpdateOrderStatusRequest};
 use crate::api::response::{CreateOrderResponse, OrderResponse, PayOrderResponse};
 use crate::data::repos::implementors::user_repo::UserRepo;
+use crate::data::repos::traits::repository::Repository;
 use crate::security::jwt::AccessClaims;
 use crate::services::errors::OrderServiceError;
 use crate::services::order_service::{OrderService, OrderStatus};
@@ -237,7 +238,21 @@ pub async fn create_order(
 ) -> impl IntoResponse {
     let service = OrderService::new();
 
-    let user_id = claims.map(|c| c.sub as i32);
+    let user_id = match &claims {
+        Some(claims) => {
+            let user_repo = UserRepo::new();
+            match user_repo.get_by_id(claims.sub as i32).await {
+                Ok(Some(_)) => Some(claims.sub as i32),
+                Ok(None) => {
+                    return (StatusCode::UNAUTHORIZED, "User no longer exists").into_response();
+                }
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
+                }
+            }
+        }
+        None => None,
+    };
 
     let items: Vec<(i32, i32)> = payload
         .products
@@ -247,6 +262,9 @@ pub async fn create_order(
 
     let new_id = match service.create_order(user_id, items).await {
         Ok(id) => id,
+        Err(OrderServiceError::InvalidOrderItems) => {
+            return (StatusCode::BAD_REQUEST, "Invalid item quantity").into_response();
+        }
         Err(OrderServiceError::OrderCreationFailed) => {
             return (StatusCode::BAD_REQUEST, "Failed to create order (check products)")
                 .into_response();
@@ -293,23 +311,35 @@ pub async fn get_user_orders_by_name(
 
     let is_self = claims.sub as i32 == target_user_id;
 
-    if !is_self {
-        let mut is_admin = false;
-        for role_id in &roles {
-            match service.is_admin(*role_id as i32).await {
-                Ok(true) => {
-                    is_admin = true;
-                    break;
-                }
-                Ok(false) => continue,
-                Err(_) => {
-                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
-                }
+    if is_self {
+        return match service.get_own_orders(target_user_id).await {
+            Ok(orders) => {
+                let response: Vec<OrderResponse> = orders
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(OrderResponse::from)
+                    .collect();
+                (StatusCode::OK, Json(response)).into_response()
+            }
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        };
+    }
+
+    let mut is_admin = false;
+    for role_id in &roles {
+        match service.is_admin(*role_id as i32).await {
+            Ok(true) => {
+                is_admin = true;
+                break;
+            }
+            Ok(false) => continue,
+            Err(_) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
             }
         }
-        if !is_admin {
-            return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
-        }
+    }
+    if !is_admin {
+        return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
     for role_id in roles {
@@ -384,23 +414,10 @@ pub async fn cancel_order(
     }
 
     if is_owner {
-        if let Some(claims) = &claims {
-            let roles = claims.roles.clone().unwrap_or_default();
-            for role_id in roles {
-                match service.cancel_order(order_id, role_id as i32).await {
-                    Ok(_) => return (StatusCode::OK, "Order cancelled").into_response(),
-                    Err(OrderServiceError::PermissionDenied) => continue,
-                    Err(OrderServiceError::OrderNotFound) => {
-                        return (StatusCode::NOT_FOUND, "Order not found").into_response();
-                    }
-                    Err(_) => {
-                        return (StatusCode::INTERNAL_SERVER_ERROR, "Database error")
-                            .into_response();
-                    }
-                }
-            }
-        }
-        return (StatusCode::FORBIDDEN, "Permission denied").into_response();
+        return match service.cancel_order_as_owner(order_id).await {
+            Ok(_) => (StatusCode::OK, "Order cancelled").into_response(),
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        };
     }
 
     (StatusCode::FORBIDDEN, "Permission denied").into_response()
