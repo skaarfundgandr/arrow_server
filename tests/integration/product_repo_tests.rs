@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]
 use arrow_server_lib::data::database::*;
 use arrow_server_lib::data::models::product::{NewProduct, UpdateProduct};
 use arrow_server_lib::data::repos::implementors::product_repo::ProductRepo;

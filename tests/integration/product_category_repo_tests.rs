@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]
 use arrow_server_lib::data::models::categories::NewCategory;
 use arrow_server_lib::data::models::product::NewProduct;
 use arrow_server_lib::data::models::product_category::NewProductCategory;

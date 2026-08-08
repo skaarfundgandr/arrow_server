@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]
 #[tokio::test]
 #[serial_test::serial]
 pub async fn test_database_connection() {
