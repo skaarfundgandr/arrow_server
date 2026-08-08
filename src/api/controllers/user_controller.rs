@@ -35,7 +35,13 @@ async fn check_is_admin(role_ids: &[usize]) -> bool {
 /// - The admin username is reserved (409 Conflict).
 /// - Every registered user gets the CUSTOMER role.
 pub async fn register_user(Json(new_user): Json<NewUserDTO>) -> impl IntoResponse {
-    let config = Config::default();
+    let config = match Config::get() {
+        Ok(config) => config,
+        Err(e) => {
+            tracing::error!("Failed to load config: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Configuration error").into_response();
+        }
+    };
     if new_user.username == config.admin_username {
         return (StatusCode::CONFLICT, "Username is reserved").into_response();
     }

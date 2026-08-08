@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]
 use arrow_server_lib::api::config::Config;
 use arrow_server_lib::api::controllers::dto::user_dto::UserDTO;
 use arrow_server_lib::api::controllers::user_controller::{
@@ -260,7 +261,7 @@ async fn test_register_user_assigns_customer_role() {
 async fn test_register_admin_username_conflict() {
     setup().await.expect("Setup failed");
 
-    let admin_username = Config::default().admin_username;
+    let admin_username = Config::get().unwrap().admin_username.clone();
 
     let app = app();
 
@@ -305,7 +306,7 @@ async fn test_seed_admin_from_env_idempotent() {
     let users = repo.get_all().await.expect("Query failed").unwrap();
     let admin_users: Vec<_> = users
         .iter()
-        .filter(|u| u.username == Config::default().admin_username)
+        .filter(|u| u.username == Config::get().unwrap().admin_username)
         .collect();
     assert_eq!(admin_users.len(), 1);
 
@@ -333,7 +334,7 @@ async fn test_login_env_admin_credentials() {
         .await
         .expect("Seeding failed");
 
-    let config = Config::default();
+    let config = Config::get().unwrap();
 
     let app = app();
 

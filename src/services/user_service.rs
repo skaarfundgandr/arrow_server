@@ -18,7 +18,7 @@ impl UserService {
     /// Idempotently creates the admin user configured via ADMIN_USERNAME/ADMIN_PASSWORD
     /// and assigns it the ADMIN role (creating the role if missing).
     pub async fn seed_admin_from_env(&self) -> Result<(), UserServiceError> {
-        let config = Config::default();
+        let config = Config::get().map_err(|_| UserServiceError::ConfigError)?;
         let user_repo = UserRepo::new();
 
         if user_repo

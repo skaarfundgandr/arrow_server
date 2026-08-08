@@ -26,14 +26,14 @@ pub async fn add_category(
 ) -> impl IntoResponse {
     let service = ProductCategoryService::new();
 
-    if claims.roles.is_none() {
+    let Some(roles) = claims.roles.as_ref() else {
         tracing::error!("Roles is None");
         return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-    }
+    };
 
-    for role in claims.roles.unwrap() {
+    for role in roles {
         // Clone payload because we might iterate
-        match service.add_category(role as i32, payload.clone()).await {
+        match service.add_category(*role as i32, payload.clone()).await {
             Ok(_) => {
                 tracing::info!("Added category {}", payload.name);
                 return (StatusCode::CREATED, "Category added successfully").into_response();
@@ -56,14 +56,14 @@ pub async fn edit_category(
 ) -> impl IntoResponse {
     let service = ProductCategoryService::new();
 
-    if claims.roles.is_none() {
+    let Some(roles) = claims.roles.as_ref() else {
         tracing::error!("Roles is none");
         return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-    }
+    };
 
-    for role in claims.roles.unwrap() {
+    for role in roles {
         match service
-            .edit_category(role as i32, category_id, payload.clone())
+            .edit_category(*role as i32, category_id, payload.clone())
             .await
         {
             Ok(_) => {
@@ -87,14 +87,14 @@ pub async fn add_product_to_category(
 ) -> impl IntoResponse {
     let service = ProductCategoryService::new();
 
-    if claims.roles.is_none() {
+    let Some(roles) = claims.roles.as_ref() else {
         tracing::error!("Roles is none");
         return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-    }
+    };
 
-    for role in claims.roles.unwrap() {
+    for role in roles {
         match service
-            .add_product_to_category(role as i32, payload.clone())
+            .add_product_to_category(*role as i32, payload.clone())
             .await
         {
             Ok(_) => {
@@ -130,13 +130,13 @@ pub async fn delete_category(
 ) -> impl IntoResponse {
     let service = ProductCategoryService::new();
 
-    if claims.roles.is_none() {
+    let Some(roles) = claims.roles.as_ref() else {
         tracing::error!("Roles is none");
         return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-    }
+    };
 
-    for role in claims.roles.unwrap() {
-        match service.delete_category(role as i32, category_id).await {
+    for role in roles {
+        match service.delete_category(*role as i32, category_id).await {
             Ok(_) => {
                 tracing::info!("Deleted category {}", category_id);
                 return (StatusCode::OK, "Category deleted successfully").into_response();
@@ -158,14 +158,14 @@ pub async fn remove_product_from_category(
 ) -> impl IntoResponse {
     let service = ProductCategoryService::new();
 
-    if claims.roles.is_none() {
+    let Some(roles) = claims.roles.as_ref() else {
         tracing::error!("Roles is none");
         return (StatusCode::FORBIDDEN, "Permission denied").into_response();
-    }
+    };
 
-    for role in claims.roles.unwrap() {
+    for role in roles {
         match service
-            .remove_product_from_category(role as i32, &payload.category, &payload.product)
+            .remove_product_from_category(*role as i32, &payload.category, &payload.product)
             .await
         {
             Ok(_) => {

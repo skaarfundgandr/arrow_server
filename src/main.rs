@@ -16,5 +16,8 @@ async fn main() {
         .init();
 
     tracing::info!("{} v{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-    arrow_server_lib::api::server::start().await;
+    if let Err(e) = arrow_server_lib::api::server::start().await {
+        tracing::error!("Server failed to start: {}", e);
+        std::process::exit(1);
+    }
 }

@@ -8,6 +8,7 @@ pub enum AuthError {
     UnauthorizedAccess,
     TokenCreationError,
     InvalidToken,
+    ConfigError,
 }
 
 impl std::error::Error for AuthError {}
@@ -29,6 +30,7 @@ impl std::fmt::Display for AuthError {
             AuthError::UnauthorizedAccess => write!(f, "Unauthorized access attempt detected."),
             AuthError::TokenCreationError => write!(f, "Token creation failed"),
             AuthError::InvalidToken => write!(f, "Invalid token credentials provided."),
+            AuthError::ConfigError => write!(f, "Configuration error"),
         }
     }
 }

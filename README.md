@@ -59,7 +59,7 @@ cp .env.example .env
 | `ORDERING_BASE_URL` | no | `{API_BASE_URL}/api/v1/products` | Redirect target of `GET /api/v1/qr/visit` |
 | `MAX_PAYMENT_AMOUNT` | no | `1000.00` | Order total above which mock payment fails |
 
-> Missing `DATABASE_URL`, `JWT_SECRET`, `ADMIN_PASSWORD` or `QR_SIGNING_SECRET` aborts startup.
+> Missing `DATABASE_URL`, `JWT_SECRET`, `ADMIN_PASSWORD` or `QR_SIGNING_SECRET` fails startup: the error is logged via `tracing` and the process exits with a non-zero status.
 
 ### 2. Create the database and run migrations
 

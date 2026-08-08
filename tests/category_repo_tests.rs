@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]
 use arrow_server_lib::data::models::categories::{NewCategory, UpdateCategory};
 use arrow_server_lib::data::repos::implementors::category_repo::CategoryRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
@@ -16,7 +17,7 @@ async fn test_category_repo_crud() {
 
     // 1. Create
     let new_category = NewCategory {
-        name: name,
+        name,
         description: Some(description),
     };
     let add_result = repo.add(new_category).await;

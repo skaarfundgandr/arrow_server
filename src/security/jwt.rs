@@ -14,7 +14,7 @@ impl JwtService {
 
     pub async fn generate_token(&self, user: UserDTO) -> Result<String, AuthError> {
         let curr_time = chrono::Utc::now().timestamp() as usize;
-        let config = Config::default();
+        let config = Config::get().map_err(|_| AuthError::ConfigError)?;
 
         let user_repo = UserRepo::new();
         let role_repo = UserRoleRepo::new();
@@ -58,10 +58,11 @@ impl JwtService {
     /// Encodes a JWT from arbitrary claims (used by tests to craft tokens,
     /// e.g. for users that do not exist in the database).
     pub async fn encode_claims(&self, claims: &AccessClaims) -> Result<String, AuthError> {
+        let config = Config::get().map_err(|_| AuthError::ConfigError)?;
         jsonwebtoken::encode(
             &jsonwebtoken::Header::default(),
             claims,
-            &jsonwebtoken::EncodingKey::from_secret(Config::default().jwt_secret.as_ref()),
+            &jsonwebtoken::EncodingKey::from_secret(config.jwt_secret.as_ref()),
         )
         .map_err(|_| AuthError::TokenCreationError)
     }
@@ -71,10 +72,11 @@ impl JwtService {
         token: &str,
     ) -> Result<T, AuthError> {
         let validation = jsonwebtoken::Validation::default();
+        let config = Config::get().map_err(|_| AuthError::ConfigError)?;
 
         let token_data = jsonwebtoken::decode::<T>(
             token,
-            &jsonwebtoken::DecodingKey::from_secret(Config::default().jwt_secret.as_ref()),
+            &jsonwebtoken::DecodingKey::from_secret(config.jwt_secret.as_ref()),
             &validation,
         )
         .map_err(|_| AuthError::InvalidToken);

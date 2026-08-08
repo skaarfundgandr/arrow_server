@@ -9,6 +9,14 @@ ARROW (**A**synchronous **R**ust **R**estaurant **O**rder **W**orkflow) Server: 
 - Migrations: `diesel migration run`, `diesel migration generate NAME` — stored in the non-standard dir `src/data/migrations` (per `diesel.toml`); after schema changes run `diesel print-schema` (writes `src/data/models/schema.rs`)
 - CI (`.github/workflows/rust.yml`) only runs `cargo build` on master — no clippy/fmt/test gate
 
+## Lint
+
+- Deny lints live in `[lints.clippy]` in Cargo.toml (package-wide): `unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented`
+- `src/` must stay clippy-clean with NO `#[allow(...)]` annotations — errors are handled via typed error enums (hand-written `Display`/`std::error::Error` impls), never suppressed
+- Tests are exempt via a crate-level `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]` at the top of each file in `tests/`; tests always live in `tests/` (no `#[cfg(test)]` in `src/`)
+- No `clippy.toml` — all lint configuration lives in Cargo.toml
+- Clippy is local-only today: CI runs `cargo build` only
+
 ## Setup
 
 - Required env, loaded from `.env` via dotenvy in `src/data/database.rs`: `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRATION_MINUTES` — see `.env.example` and `compose.yml.example` (local MySQL)

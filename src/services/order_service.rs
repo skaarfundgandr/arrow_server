@@ -179,7 +179,7 @@ impl OrderService {
 
     /// Checks whether a role carries the ADMIN permission.
     pub async fn is_admin(&self, role_id: i32) -> Result<bool, OrderServiceError> {
-        Ok(self.has_permission(role_id, RolePermissions::Admin).await?)
+        self.has_permission(role_id, RolePermissions::Admin).await
     }
 
     /// Gets an order by ID (must have READ permission or be Admin)
@@ -293,7 +293,8 @@ impl OrderService {
             _ => return Err(OrderServiceError::PaymentConflict),
         }
 
-        let config = crate::api::config::Config::default();
+        let config = crate::api::config::Config::get()
+            .map_err(|_| OrderServiceError::ConfigError)?;
         let (final_status, message) = if order.total_amount > config.max_payment_amount {
             (
                 "failed".to_string(),

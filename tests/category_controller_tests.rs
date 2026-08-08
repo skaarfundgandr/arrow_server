@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]
 use arrow_server_lib::api::controllers::category_controller::{
     add_category, add_product_to_category, delete_category, edit_category, get_categories,
     get_products_by_category, remove_product_from_category,

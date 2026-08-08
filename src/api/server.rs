@@ -1,3 +1,4 @@
+use crate::api::config::Config;
 use crate::api::routes::{
     auth_routes, category_routes, order_routes, product_routes, qr_routes, role_routes,
     user_routes,
@@ -12,7 +13,28 @@ use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
-pub async fn start() {
+#[derive(Debug)]
+pub enum ServerError {
+    Bind(std::io::Error),
+    Serve(std::io::Error),
+    Config(crate::api::config::ConfigError),
+}
+
+impl std::fmt::Display for ServerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ServerError::Bind(e) => write!(f, "Failed to bind to address: {}", e),
+            ServerError::Serve(e) => write!(f, "Server failed: {}", e),
+            ServerError::Config(e) => write!(f, "Configuration error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for ServerError {}
+
+pub async fn start() -> Result<(), ServerError> {
+    Config::get().map_err(ServerError::Config)?;
+
     let user_service = crate::services::user_service::UserService::new();
     if let Err(e) = user_service.seed_admin_from_env().await {
         tracing::warn!("Failed to seed admin user from environment: {}", e);
@@ -34,14 +56,14 @@ pub async fn start() {
 
     let listener = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], 3000)))
         .await
-        .expect("Failed to bind to address");
+        .map_err(ServerError::Bind)?;
 
     tracing::info!("Listening on port 3000");
 
     axum::serve(listener, router)
         .with_graceful_shutdown(shutdown_signal())
         .await
-        .expect("Failed to start the server");
+        .map_err(ServerError::Serve)
 }
 
 #[tracing::instrument(level = tracing::Level::TRACE, name = "axum", skip_all, fields(method=request.method().to_string(), uri=request.uri().to_string()))]
@@ -56,17 +78,21 @@ pub async fn logging_middleware(request: Request<Body>, next: Next) -> Response 
 
 pub async fn shutdown_signal() {
     let ctrl_c = async {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to install CTRL+C signal handler");
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::error!("Failed to install CTRL+C signal handler: {}", e);
+        }
     };
 
     #[cfg(unix)]
     let terminate = async {
-        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("Failed to install terminate signal handler")
-            .recv()
-            .await;
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(e) => {
+                tracing::error!("Failed to install terminate signal handler: {}", e);
+            }
+        }
     };
 
     #[cfg(not(unix))]

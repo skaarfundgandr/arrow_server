@@ -30,7 +30,13 @@ pub async fn ordering_qr(claims: AccessClaims) -> impl IntoResponse {
         return (StatusCode::FORBIDDEN, "Admin permission required").into_response();
     }
 
-    let config = Config::default();
+    let config = match Config::get() {
+        Ok(config) => config,
+        Err(e) => {
+            tracing::error!("Failed to load config: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Configuration error").into_response();
+        }
+    };
     let visit_url = format!("{}/api/v1/qr/visit", config.api_base_url);
 
     let code = match QrCode::new(visit_url.as_bytes()) {
@@ -52,10 +58,16 @@ pub async fn ordering_qr(claims: AccessClaims) -> impl IntoResponse {
 /// GET /qr/visit (public)
 /// Redirects the visitor to the ordering frontend.
 pub async fn visit() -> impl IntoResponse {
-    let config = Config::default();
+    let config = match Config::get() {
+        Ok(config) => config,
+        Err(e) => {
+            tracing::error!("Failed to load config: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Configuration error").into_response();
+        }
+    };
     (
         StatusCode::FOUND,
-        [(header::LOCATION, config.ordering_base_url)],
+        [(header::LOCATION, config.ordering_base_url.clone())],
     )
         .into_response()
 }

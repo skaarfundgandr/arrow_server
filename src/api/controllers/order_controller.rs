@@ -163,6 +163,9 @@ pub async fn get_order_by_id(
             Err(OrderUrlError::Expired) => {
                 (StatusCode::GONE, "Order url expired").into_response()
             }
+            Err(OrderUrlError::Config) | Err(OrderUrlError::SigningKey) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Order url unavailable").into_response()
+            }
         },
         _ => (StatusCode::FORBIDDEN, "Permission denied").into_response(),
     }
@@ -204,6 +207,10 @@ pub async fn pay_order(
                 }
                 Err(OrderUrlError::Expired) => {
                     return (StatusCode::GONE, "Order url expired").into_response();
+                }
+                Err(OrderUrlError::Config) | Err(OrderUrlError::SigningKey) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Order url unavailable")
+                        .into_response();
                 }
             },
             _ => return (StatusCode::FORBIDDEN, "Permission denied").into_response(),
@@ -285,7 +292,14 @@ pub async fn create_order(
         }
     };
 
-    let order_url = order_url::build_order_url(new_id);
+    let order_url = match order_url::build_order_url(new_id) {
+        Ok(url) => url,
+        Err(e) => {
+            tracing::error!("Failed to build order url: {}", e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build order url")
+                .into_response();
+        }
+    };
     let response = CreateOrderResponse {
         order: OrderResponse::from(order_data),
         order_url,

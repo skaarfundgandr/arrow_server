@@ -8,6 +8,8 @@ type HmacSha256 = Hmac<Sha256>;
 pub enum OrderUrlError {
     InvalidSignature,
     Expired,
+    Config,
+    SigningKey,
 }
 
 impl std::fmt::Display for OrderUrlError {
@@ -15,6 +17,8 @@ impl std::fmt::Display for OrderUrlError {
         match self {
             OrderUrlError::InvalidSignature => write!(f, "Invalid order url signature"),
             OrderUrlError::Expired => write!(f, "Order url expired"),
+            OrderUrlError::Config => write!(f, "Order url configuration error"),
+            OrderUrlError::SigningKey => write!(f, "Order url signing key error"),
         }
     }
 }
@@ -23,24 +27,24 @@ impl std::error::Error for OrderUrlError {}
 
 /// Computes the HMAC-SHA256 hex signature over `order_id={id}&exp={exp}`
 /// keyed with the configured QR signing secret.
-pub fn sign_order_url(order_id: i32, exp: u64) -> String {
-    let config = Config::default();
+pub fn sign_order_url(order_id: i32, exp: u64) -> Result<String, OrderUrlError> {
+    let config = Config::get().map_err(|_| OrderUrlError::Config)?;
     let mut mac = HmacSha256::new_from_slice(config.qr_signing_secret.as_bytes())
-        .expect("HMAC can accept any key size");
+        .map_err(|_| OrderUrlError::SigningKey)?;
     mac.update(format!("order_id={}&exp={}", order_id, exp).as_bytes());
-    hex::encode(mac.finalize().into_bytes())
+    Ok(hex::encode(mac.finalize().into_bytes()))
 }
 
 /// Builds the full public order URL: `{API_BASE}/api/v1/orders/{id}?exp={ts}&sig={hex}`
-pub fn build_order_url(order_id: i32) -> String {
-    let config = Config::default();
+pub fn build_order_url(order_id: i32) -> Result<String, OrderUrlError> {
+    let config = Config::get().map_err(|_| OrderUrlError::Config)?;
     let now = chrono::Utc::now().timestamp() as u64;
     let exp = now + config.order_link_ttl_minutes * 60;
-    let sig = sign_order_url(order_id, exp);
-    format!(
+    let sig = sign_order_url(order_id, exp)?;
+    Ok(format!(
         "{}/api/v1/orders/{}?exp={}&sig={}",
         config.api_base_url, order_id, exp, sig
-    )
+    ))
 }
 
 /// Verifies the signature and expiry of an order url.
@@ -52,9 +56,9 @@ pub fn verify_order_url(order_id: i32, exp: u64, sig: &str) -> Result<(), OrderU
         return Err(OrderUrlError::Expired);
     }
 
-    let config = Config::default();
+    let config = Config::get().map_err(|_| OrderUrlError::Config)?;
     let mut mac = HmacSha256::new_from_slice(config.qr_signing_secret.as_bytes())
-        .expect("HMAC can accept any key size");
+        .map_err(|_| OrderUrlError::SigningKey)?;
     mac.update(format!("order_id={}&exp={}", order_id, exp).as_bytes());
 
     let provided = hex::decode(sig).map_err(|_| OrderUrlError::InvalidSignature)?;

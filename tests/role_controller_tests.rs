@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]
 use arrow_server_lib::api::controllers::dto::user_dto::UserDTO;
 use arrow_server_lib::api::controllers::role_controller::{
     assign_role_to_user, create_role, delete_role, get_all_roles, get_role_by_name,

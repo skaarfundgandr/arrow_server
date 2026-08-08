@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]
 use arrow_server_lib::api::controllers::dto::user_dto::UserDTO;
 use arrow_server_lib::api::controllers::order_controller::{
     cancel_order, create_order, get_user_orders_by_name, pay_order,
@@ -20,7 +21,6 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::{get, post};
 use bigdecimal::BigDecimal;
-use chrono;
 use diesel::result;
 use diesel_async::RunQueryDsl;
 use http_body_util::BodyExt;
@@ -288,7 +288,7 @@ async fn test_pay_order_via_valid_order_url() {
     let order_id = create_guest_order(&app, pid, 1).await;
 
     let exp = chrono::Utc::now().timestamp() as u64 + 3600;
-    let sig = sign_order_url(order_id, exp);
+    let sig = sign_order_url(order_id, exp).unwrap();
     let url = format!("/orders/{}/pay?exp={}&sig={}", order_id, exp, sig);
 
     let response = app
@@ -344,7 +344,7 @@ async fn test_pay_order_already_paid_conflict() {
     let order_id = create_guest_order(&app, pid, 1).await;
 
     let exp = chrono::Utc::now().timestamp() as u64 + 3600;
-    let sig = sign_order_url(order_id, exp);
+    let sig = sign_order_url(order_id, exp).unwrap();
     let url = format!("/orders/{}/pay?exp={}&sig={}", order_id, exp, sig);
 
     let response = app
@@ -406,7 +406,7 @@ async fn test_pay_order_exact_max_amount_paid() {
     let order_id = create_guest_order(&app, pid, 1).await;
 
     let exp = chrono::Utc::now().timestamp() as u64 + 3600;
-    let sig = sign_order_url(order_id, exp);
+    let sig = sign_order_url(order_id, exp).unwrap();
     let url = format!("/orders/{}/pay?exp={}&sig={}", order_id, exp, sig);
 
     let response = app
@@ -462,7 +462,7 @@ async fn test_pay_order_expired_url_gone() {
     let order_id = create_guest_order(&app, pid, 1).await;
 
     let past_exp = chrono::Utc::now().timestamp() as u64 - 60;
-    let sig = sign_order_url(order_id, past_exp);
+    let sig = sign_order_url(order_id, past_exp).unwrap();
     let url = format!("/orders/{}/pay?exp={}&sig={}", order_id, past_exp, sig);
 
     let response = app

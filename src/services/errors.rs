@@ -32,6 +32,7 @@ pub enum OrderServiceError {
     PaymentConflict,
     InvalidOrderItems,
     DatabaseError,
+    ConfigError,
 }
 
 impl std::error::Error for OrderServiceError {}
@@ -48,6 +49,7 @@ impl std::fmt::Display for OrderServiceError {
             OrderServiceError::PaymentConflict => write!(f, "Order payment conflict"),
             OrderServiceError::InvalidOrderItems => write!(f, "Invalid order items"),
             OrderServiceError::DatabaseError => write!(f, "Database error"),
+            OrderServiceError::ConfigError => write!(f, "Configuration error"),
         }
     }
 }
@@ -120,6 +122,7 @@ pub enum UserServiceError {
     RoleCreationFailed,
     RoleAssignmentFailed,
     DatabaseError,
+    ConfigError,
 }
 
 impl std::error::Error for UserServiceError {}
@@ -133,6 +136,7 @@ impl std::fmt::Display for UserServiceError {
             UserServiceError::RoleCreationFailed => write!(f, "Role creation failed"),
             UserServiceError::RoleAssignmentFailed => write!(f, "Role assignment failed"),
             UserServiceError::DatabaseError => write!(f, "Database error"),
+            UserServiceError::ConfigError => write!(f, "Configuration error"),
         }
     }
 }
