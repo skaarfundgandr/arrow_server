@@ -5,7 +5,14 @@ edition = "2024"
 
 [lib]
 name = "arrow_server_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["rlib"]
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
 
 [dependencies]
 argon2 = { version = "0.5.3", features = ["std"] }
