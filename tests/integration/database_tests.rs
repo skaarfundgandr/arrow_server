@@ -1,5 +1,4 @@
 #[tokio::test]
-#[serial_test::serial]
 pub async fn test_database_connection() {
     let database = arrow_server_lib::data::database::Database::new().await;
 
