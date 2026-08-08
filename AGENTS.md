@@ -34,6 +34,7 @@ ARROW (**A**synchronous **R**ust **R**estaurant **O**rder **W**orkflow) Server: 
 - All writes (insert/update/delete) MUST be wrapped in `conn.transaction(|c| async move { ... }.scope_boxed()).await` — `.scope_boxed()` is required by diesel-async (see any file in `implementors/`)
 - Repos return `Ok(None)` for both NotFound and empty loads — never `Ok(vec![])` or a NotFound error
 - CPU-bound work (argon2 hashing in `AuthService`) goes through `tokio::task::spawn_blocking`
+- Rate limiting (`tower_governor`) is configured in `src/api/server.rs` only: `GovernorLayer` applied to the nested auth and orders routers, tunables are `const`s at the top of that file. `SmartIpKeyExtractor` trusts `X-Forwarded-For`/`X-Real-IP`/`Forwarded` (spoofable if the app is reachable without the ACA ingress in front — acceptable for demo)
 - Adding an entity: migration → run → `diesel print-schema` → three model structs → repo trait impl → service → controller/DTO → route; wire each in the matching `mod.rs`
 
 ## Docs
