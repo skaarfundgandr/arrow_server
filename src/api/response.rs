@@ -12,8 +12,7 @@ pub struct LoginResponse {
 pub struct OrderResponse {
     pub order_id: i32,
     pub user_id: Option<i32>,
-    pub products: Vec<ProductResponse>,
-    pub quantity: i32,
+    pub products: Vec<OrderItemResponse>,
     pub total_amount: BigDecimal,
     pub status: Option<String>,
     pub payment_status: String,
@@ -21,6 +20,14 @@ pub struct OrderResponse {
     pub created_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct OrderItemResponse {
+    pub product: ProductResponse,
+    pub quantity: i32,
+    pub unit_price: BigDecimal,
+    pub line_total: BigDecimal,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -20,6 +20,12 @@ pub struct OrderUrlQuery {
     pub sig: Option<String>,
 }
 
+/// Query parameters for listing orders
+#[derive(Deserialize)]
+pub struct OrderListQuery {
+    pub status: Option<String>,
+}
+
 /// Get orders by role (Admin only)
 pub async fn get_orders_by_role(
     claims: AccessClaims,
@@ -55,15 +61,32 @@ pub async fn get_orders_by_role(
     (StatusCode::FORBIDDEN, "Admin permission required").into_response()
 }
 
-/// Get all orders (Admin only)
-pub async fn get_all_orders(claims: AccessClaims) -> impl IntoResponse {
+/// Get all orders (Admin only). When `?status=` is present, only orders
+/// with that status are returned; unknown/invalid statuses match nothing
+/// and yield an empty list.
+pub async fn get_all_orders(
+    claims: AccessClaims,
+    Query(params): Query<OrderListQuery>,
+) -> impl IntoResponse {
     let service = OrderService::new();
     let roles = claims.roles.unwrap_or_default();
+
+    let status_filter: Option<Option<OrderStatus>> = params
+        .status
+        .map(|s| OrderStatus::from_str(&s).ok());
 
     for role_id in roles {
         match service.is_admin(role_id as i32).await {
             Ok(true) => {
-                return match service.get_all_orders(role_id as i32).await {
+                let result = match status_filter {
+                    Some(Some(status)) => {
+                        service.get_orders_by_status(status, role_id as i32).await
+                    }
+                    // Invalid status: matches no orders -> empty list
+                    Some(None) => Ok(None),
+                    None => service.get_all_orders(role_id as i32).await,
+                };
+                return match result {
                     Ok(orders) => {
                         let response: Vec<OrderResponse> = orders
                             .unwrap_or_default()
@@ -308,6 +331,111 @@ pub async fn get_user_orders_by_name(
     }
 
     (StatusCode::FORBIDDEN, "Permission denied").into_response()
+}
+
+/// Cancels an order (status -> Cancelled).
+/// Access is granted to the JWT owner of the order or to an ADMIN.
+/// Guest orders (null user_id) can only be cancelled by an ADMIN.
+/// Unknown order -> 404; non-owner non-admin -> 403.
+pub async fn cancel_order(
+    OptionalAccessClaims(claims): OptionalAccessClaims,
+    Path(order_id): Path<i32>,
+) -> impl IntoResponse {
+    let service = OrderService::new();
+
+    let order_data = match service.get_order_by_id_public(order_id).await {
+        Ok(Some(data)) => data,
+        Ok(None) => return (StatusCode::NOT_FOUND, "Order not found").into_response(),
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+    };
+
+    let is_owner = claims
+        .as_ref()
+        .map(|c| Some(c.sub as i32) == order_data.0.user_id)
+        .unwrap_or(false);
+
+    let mut is_admin = false;
+    let mut admin_role_id = 0;
+    if let Some(claims) = &claims {
+        let roles = claims.roles.clone().unwrap_or_default();
+        for role_id in roles {
+            match service.is_admin(role_id as i32).await {
+                Ok(true) => {
+                    is_admin = true;
+                    admin_role_id = role_id as i32;
+                    break;
+                }
+                Ok(false) => continue,
+                Err(_) => {
+                    return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
+                }
+            }
+        }
+    }
+
+    if is_admin {
+        return match service.cancel_order(order_id, admin_role_id).await {
+            Ok(_) => (StatusCode::OK, "Order cancelled").into_response(),
+            Err(OrderServiceError::OrderNotFound) => {
+                (StatusCode::NOT_FOUND, "Order not found").into_response()
+            }
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
+        };
+    }
+
+    if is_owner {
+        if let Some(claims) = &claims {
+            let roles = claims.roles.clone().unwrap_or_default();
+            for role_id in roles {
+                match service.cancel_order(order_id, role_id as i32).await {
+                    Ok(_) => return (StatusCode::OK, "Order cancelled").into_response(),
+                    Err(OrderServiceError::PermissionDenied) => continue,
+                    Err(OrderServiceError::OrderNotFound) => {
+                        return (StatusCode::NOT_FOUND, "Order not found").into_response();
+                    }
+                    Err(_) => {
+                        return (StatusCode::INTERNAL_SERVER_ERROR, "Database error")
+                            .into_response();
+                    }
+                }
+            }
+        }
+        return (StatusCode::FORBIDDEN, "Permission denied").into_response();
+    }
+
+    (StatusCode::FORBIDDEN, "Permission denied").into_response()
+}
+
+/// Deletes an order (Admin only). Unknown order -> 404; non-admin -> 403.
+pub async fn delete_order(claims: AccessClaims, Path(order_id): Path<i32>) -> impl IntoResponse {
+    let service = OrderService::new();
+    let roles = claims.roles.unwrap_or_default();
+
+    for role_id in roles {
+        match service.is_admin(role_id as i32).await {
+            Ok(true) => {
+                return match service.delete_order(order_id, role_id as i32).await {
+                    Ok(_) => (StatusCode::OK, "Order deleted").into_response(),
+                    Err(OrderServiceError::OrderNotFound) => {
+                        (StatusCode::NOT_FOUND, "Order not found").into_response()
+                    }
+                    Err(OrderServiceError::OrderDeletionFailed) => {
+                        (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete order")
+                            .into_response()
+                    }
+                    Err(_) => {
+                        (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response()
+                    }
+                };
+            }
+            Ok(false) => continue,
+            Err(_) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response();
+            }
+        }
+    }
+
+    (StatusCode::FORBIDDEN, "Admin permission required").into_response()
 }
 
 /// Updates the status of an order (Admin only)

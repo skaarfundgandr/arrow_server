@@ -28,3 +28,11 @@ body:json {
     ]
   }
 }
+
+docs {
+  Public endpoint: an optional bearer token attributes the order to the user,
+  otherwise it is a guest order (user_id null). Response is
+  {order, order_url}: order contains per-item products with quantity,
+  unit_price and line_total; order_url is a signed link (exp + sig query
+  params) granting access/payment without a JWT.
+}

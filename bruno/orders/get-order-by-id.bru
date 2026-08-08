@@ -9,3 +9,9 @@ get {
   body: none
   auth: inherit
 }
+
+docs {
+  Access: ADMIN, the JWT owner of the order, or anyone with a valid signed
+  order_url passed as query params (?exp=<unix>&sig=<signature>) - no JWT
+  required for the order_url flow.
+}

@@ -3,7 +3,7 @@ use crate::api::controllers::dto::{
     user_dto::{NewUserDTO, UpdateUserDTO},
 };
 use crate::api::request::{CreateCategoryRequest, UpdateCategoryRequest};
-use crate::api::response::{CategoryResponse, OrderResponse, ProductResponse};
+use crate::api::response::{CategoryResponse, OrderItemResponse, OrderResponse, ProductResponse};
 use crate::data::models::categories::{Category, NewCategory, UpdateCategory};
 use crate::data::models::order::Order;
 use crate::data::models::order_product::OrderProduct;
@@ -13,6 +13,7 @@ use crate::data::models::user::{NewUser, UpdateUser};
 use crate::data::models::roles::{
     PermissionString, RolePermissions, UpdateRole, Role,
 };
+use bigdecimal::{BigDecimal, FromPrimitive};
 use diesel::deserialize::FromSql;
 use diesel::mysql::{Mysql, MysqlValue};
 use diesel::serialize::{Output, ToSql};
@@ -140,19 +141,21 @@ impl<'a> From<&'a UpdateCategoryRequest> for UpdateCategory<'a> {
 
 impl From<(Order, Vec<(OrderProduct, Product)>)> for OrderResponse {
     fn from((order, items): (Order, Vec<(OrderProduct, Product)>)) -> Self {
-        let mut product_responses = Vec::new();
-        let mut total_qty = 0;
-        
-        for (op, p) in items {
-            total_qty += op.quantity;
-            product_responses.push(ProductResponse::from(p));
-        }
+        let products = items
+            .into_iter()
+            .map(|(op, p)| OrderItemResponse {
+                product: ProductResponse::from(p),
+                quantity: op.quantity,
+                unit_price: op.unit_price.clone(),
+                line_total: &op.unit_price
+                    * BigDecimal::from_i32(op.quantity).unwrap_or_default(),
+            })
+            .collect();
 
         Self {
             order_id: order.order_id,
             user_id: order.user_id,
-            products: product_responses,
-            quantity: total_qty,
+            products,
             total_amount: order.total_amount,
             status: Some(order.status),
             payment_status: order.payment_status,

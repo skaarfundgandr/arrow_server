@@ -1,6 +1,6 @@
 use crate::api::controllers::order_controller;
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 
 pub fn routes() -> Router {
     Router::new()
@@ -8,6 +8,8 @@ pub fn routes() -> Router {
         .route("/", post(order_controller::create_order))
         .route("/{id}", get(order_controller::get_order_by_id))
         .route("/{id}", post(order_controller::update_order_status))
+        .route("/{id}", delete(order_controller::delete_order))
+        .route("/{id}/cancel", post(order_controller::cancel_order))
         .route("/{id}/pay", post(order_controller::pay_order))
         .route(
             "/user/{username}",

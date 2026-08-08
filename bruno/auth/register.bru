@@ -16,7 +16,12 @@ headers {
 
 body:json {
   {
-    "username": "adminuser",
-    "password": "adminpassword"
+    "username": "newcustomer",
+    "password": "newpassword"
   }
+}
+
+docs {
+  The admin username is reserved (registration returns 409). Every registered
+  user is auto-assigned the CUSTOMER role and receives a token on success.
 }
