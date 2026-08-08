@@ -1,7 +1,7 @@
 openapi: 3.0.0
 info:
   title: Arrow Server API
-  description: REST API for restaurant order management.
+  description: REST API for restaurant QR ordering and order management.
   version: 1.0.0
 servers:
   - url: http://127.0.0.1:3000/api/v1
@@ -59,10 +59,13 @@ components:
       properties:
         user_id:
           type: integer
+          nullable: true
+          description: Only included for admins
         username:
           type: string
         role:
           $ref: '#/components/schemas/RoleDTO'
+          nullable: true
         created_at:
           type: string
         updated_at:
@@ -77,10 +80,12 @@ components:
           type: string
         description:
           type: string
+          nullable: true
         permissions:
           type: array
           items:
             type: string
+            enum: [READ, WRITE, DELETE, ADMIN]
 
     NewRoleDTO:
       type: object
@@ -110,7 +115,7 @@ components:
           type: string
         role_name:
           type: string
-    
+
     AddPermissionRequest:
       type: object
       required:
@@ -147,6 +152,7 @@ components:
           description: Decimal string
         product_image_uri:
           type: string
+          description: URL of an externally hosted image (no upload endpoint)
         categories:
           type: array
           items:
@@ -177,14 +183,18 @@ components:
           type: string
         description:
           type: string
+          nullable: true
         price:
           type: string
+          description: Decimal string
         product_image_uri:
           type: string
+          nullable: true
         categories:
           type: array
           items:
             $ref: '#/components/schemas/CategoryResponse'
+          nullable: true
 
     CreateCategoryRequest:
       type: object
@@ -209,10 +219,19 @@ components:
       properties:
         category_id:
           type: integer
+          nullable: true
+          description: Hidden (null) on public category listing
         name:
           type: string
         description:
           type: string
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          nullable: true
 
     AssignCategoryRequest:
       type: object
@@ -225,6 +244,17 @@ components:
         product:
           type: string
 
+    OrderItemRequest:
+      type: object
+      required:
+        - product_id
+        - quantity
+      properties:
+        product_id:
+          type: integer
+        quantity:
+          type: integer
+
     CreateOrderRequest:
       type: object
       required:
@@ -233,15 +263,7 @@ components:
         products:
           type: array
           items:
-            type: object
-            required:
-              - product_id
-              - quantity
-            properties:
-              product_id:
-                type: integer
-              quantity:
-                type: integer
+            $ref: '#/components/schemas/OrderItemRequest'
 
     UpdateOrderStatusRequest:
       type: object
@@ -250,6 +272,22 @@ components:
       properties:
         status:
           type: string
+          enum: [Pending, Accepted, Ready, Completed, Cancelled]
+          description: Case-insensitive
+
+    OrderItemResponse:
+      type: object
+      properties:
+        product:
+          $ref: '#/components/schemas/ProductResponse'
+        quantity:
+          type: integer
+        unit_price:
+          type: string
+          description: Price per unit at order time
+        line_total:
+          type: string
+          description: quantity * unit_price
 
     OrderResponse:
       type: object
@@ -258,20 +296,45 @@ components:
           type: integer
         user_id:
           type: integer
+          nullable: true
+          description: null for guest orders
         products:
           type: array
           items:
-            $ref: '#/components/schemas/ProductResponse'
-        quantity:
-          type: integer
-          description: Total quantity
+            $ref: '#/components/schemas/OrderItemResponse'
         total_amount:
           type: string
         status:
           type: string
+          enum: [Pending, Accepted, Ready, Completed, Cancelled]
+        payment_status:
+          type: string
+          enum: [unpaid, paid, failed]
         created_at:
           type: string
+          nullable: true
         updated_at:
+          type: string
+          nullable: true
+
+    CreateOrderResponse:
+      type: object
+      properties:
+        order:
+          $ref: '#/components/schemas/OrderResponse'
+        order_url:
+          type: string
+          description: Signed receipt link {API_BASE}/api/v1/orders/{id}?exp=&sig=
+
+    PayOrderResponse:
+      type: object
+      properties:
+        order_id:
+          type: integer
+        payment_status:
+          type: string
+          enum: [paid, failed]
+        message:
           type: string
 
 security:
@@ -296,11 +359,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid credentials
+        '404':
+          description: User not found
 
   /auth/register:
     post:
       tags: [Auth]
-      summary: Register new user
+      summary: Register new user (always CUSTOMER role)
+      description: >-
+        The username equal to ADMIN_USERNAME is reserved (409). The new user
+        is auto-assigned the CUSTOMER role and receives a token on success.
       security: []
       requestBody:
         content:
@@ -309,11 +379,13 @@ paths:
               $ref: '#/components/schemas/NewUserDTO'
       responses:
         '201':
-          description: User created (and logged in)
+          description: User created and logged in
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+        '409':
+          description: Username is reserved
 
   /auth/refresh:
     get:
@@ -326,12 +398,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+        '404':
+          description: User not found
 
   # --- Users ---
   /users:
     get:
       tags: [Users]
       summary: Get all users
+      description: user_id is only included for admins.
       responses:
         '200':
           description: List of users
@@ -354,10 +429,13 @@ paths:
       responses:
         '201':
           description: User created
+        '403':
+          description: Admin permission required
 
   /users/{id}:
     get:
       tags: [Users]
+      summary: Get user by ID
       parameters:
         - in: path
           name: id
@@ -371,6 +449,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDTO'
+        '404':
+          description: User not found
     post:
       tags: [Users]
       summary: Edit User (Admin)
@@ -388,6 +468,10 @@ paths:
       responses:
         '200':
           description: User updated
+        '403':
+          description: Admin permission required
+        '404':
+          description: User not found
     delete:
       tags: [Users]
       summary: Delete User (Admin)
@@ -400,6 +484,10 @@ paths:
       responses:
         '200':
           description: User deleted
+        '403':
+          description: Admin permission required
+        '404':
+          description: User not found
 
   /users/search:
     get:
@@ -418,12 +506,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserDTO'
+        '400':
+          description: Username query parameter is required
+        '404':
+          description: User not found
 
-  # --- Roles ---
+  # --- Roles (all Admin only) ---
   /roles:
     get:
       tags: [Roles]
-      summary: Get all roles
+      summary: Get all roles (Admin)
       responses:
         '200':
           description: List of roles
@@ -433,11 +525,13 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/RoleDTO'
+        '403':
+          description: Admin permission required
 
   /roles/create:
     post:
       tags: [Roles]
-      summary: Create Role
+      summary: Create Role (Admin)
       requestBody:
         content:
           application/json:
@@ -446,11 +540,13 @@ paths:
       responses:
         '201':
           description: Role created
+        '403':
+          description: Admin permission required
 
   /roles/update/{id}:
     post:
       tags: [Roles]
-      summary: Update Role
+      summary: Update Role (Admin)
       parameters:
         - in: path
           name: id
@@ -465,11 +561,15 @@ paths:
       responses:
         '200':
           description: Role updated
+        '403':
+          description: Admin permission required
+        '404':
+          description: Role not found
 
   /roles/{id}:
     delete:
       tags: [Roles]
-      summary: Delete Role
+      summary: Delete Role (Admin)
       parameters:
         - in: path
           name: id
@@ -479,11 +579,15 @@ paths:
       responses:
         '200':
           description: Role deleted
+        '403':
+          description: Admin permission required
+        '404':
+          description: Role not found
 
   /roles/assign:
     post:
       tags: [Roles]
-      summary: Assign role to user
+      summary: Assign role to user (Admin)
       requestBody:
         content:
           application/json:
@@ -492,11 +596,15 @@ paths:
       responses:
         '201':
           description: Role assigned
+        '403':
+          description: Admin permission required
+        '404':
+          description: User or role not found
 
   /roles/add_permission:
     post:
       tags: [Roles]
-      summary: Add permission to role
+      summary: Add permission to role (Admin)
       requestBody:
         content:
           application/json:
@@ -505,11 +613,15 @@ paths:
       responses:
         '200':
           description: Permission added
+        '400':
+          description: Invalid permission
+        '403':
+          description: Admin permission required
 
   /roles/{id}/set_permission:
     post:
       tags: [Roles]
-      summary: Set permission (overwrite)
+      summary: Set permission (overwrite) by role ID (Admin)
       parameters:
         - in: path
           name: id
@@ -524,11 +636,42 @@ paths:
       responses:
         '200':
           description: Permission set
+        '400':
+          description: Invalid permission
+        '403':
+          description: Admin permission required
+        '404':
+          description: Role not found
+
+  /roles/set_permission/{role_name}:
+    post:
+      tags: [Roles]
+      summary: Set permission (overwrite) by role name (Admin)
+      parameters:
+        - in: path
+          name: role_name
+          schema:
+            type: string
+          required: true
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetPermissionDTO'
+      responses:
+        '200':
+          description: Permission set
+        '400':
+          description: Invalid permission
+        '403':
+          description: Admin permission required
+        '404':
+          description: Role not found
 
   /roles/{id}/delete_permission:
     patch:
       tags: [Roles]
-      summary: Reset permission to READ
+      summary: Reset permission to READ (Admin)
       parameters:
         - in: path
           name: id
@@ -537,13 +680,18 @@ paths:
           required: true
       responses:
         '200':
-          description: Permissions reset
+          description: Permissions reset to READ
+        '403':
+          description: Admin permission required
+        '404':
+          description: Role not found
 
   # --- Products ---
   /products:
     get:
       tags: [Products]
-      summary: Get all products
+      summary: Get all products (public)
+      security: []
       responses:
         '200':
           description: List of products
@@ -555,7 +703,7 @@ paths:
                   $ref: '#/components/schemas/ProductResponse'
     post:
       tags: [Products]
-      summary: Create product
+      summary: Create product (WRITE permission or Admin)
       requestBody:
         content:
           application/json:
@@ -564,10 +712,16 @@ paths:
       responses:
         '201':
           description: Product created
+        '403':
+          description: Permission denied
+        '409':
+          description: Product already exists
 
   /products/{id}:
     get:
       tags: [Products]
+      summary: Get product by ID (public)
+      security: []
       parameters:
         - in: path
           name: id
@@ -581,9 +735,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductResponse'
+        '404':
+          description: Product not found
     put:
       tags: [Products]
-      summary: Update product
+      summary: Update product (WRITE permission or Admin)
       parameters:
         - in: path
           name: id
@@ -598,9 +754,13 @@ paths:
       responses:
         '200':
           description: Product updated
+        '403':
+          description: Permission denied
+        '404':
+          description: Product not found
     delete:
       tags: [Products]
-      summary: Delete product
+      summary: Delete product (DELETE permission or Admin)
       parameters:
         - in: path
           name: id
@@ -610,11 +770,18 @@ paths:
       responses:
         '200':
           description: Product deleted
+        '403':
+          description: Permission denied
+        '404':
+          description: Product not found
 
   # --- Categories ---
   /categories:
     get:
       tags: [Categories]
+      summary: Get all categories (public)
+      description: category_id and timestamps are null on public responses.
+      security: []
       responses:
         '200':
           description: List of categories
@@ -626,7 +793,7 @@ paths:
                   $ref: '#/components/schemas/CategoryResponse'
     post:
       tags: [Categories]
-      summary: Create category
+      summary: Create category (WRITE permission or Admin)
       requestBody:
         content:
           application/json:
@@ -634,12 +801,14 @@ paths:
               $ref: '#/components/schemas/CreateCategoryRequest'
       responses:
         '201':
-          description: Category created
+          description: Category added successfully
+        '403':
+          description: Permission denied
 
   /categories/{id}:
     put:
       tags: [Categories]
-      summary: Update category
+      summary: Update category (WRITE permission or Admin)
       parameters:
         - in: path
           name: id
@@ -653,10 +822,12 @@ paths:
               $ref: '#/components/schemas/UpdateCategoryRequest'
       responses:
         '201':
-          description: Category updated
+          description: Category edited successfully
+        '403':
+          description: Permission denied
     delete:
       tags: [Categories]
-      summary: Delete category
+      summary: Delete category (WRITE permission or Admin)
       parameters:
         - in: path
           name: id
@@ -665,12 +836,14 @@ paths:
           required: true
       responses:
         '200':
-          description: Category deleted
+          description: Category deleted successfully
+        '403':
+          description: Permission denied
 
   /categories/product:
     post:
       tags: [Categories]
-      summary: Add product to category
+      summary: Add product to category (WRITE permission or Admin)
       requestBody:
         content:
           application/json:
@@ -678,12 +851,16 @@ paths:
               $ref: '#/components/schemas/AssignCategoryRequest'
       responses:
         '201':
-          description: Product assigned
+          description: Product assigned to category successfully
+        '403':
+          description: Permission denied
+        '404':
+          description: Product or category not found
 
   /categories/product/remove:
     post:
       tags: [Categories]
-      summary: Remove product from category
+      summary: Remove product from category (WRITE permission or Admin)
       requestBody:
         content:
           application/json:
@@ -691,12 +868,17 @@ paths:
               $ref: '#/components/schemas/AssignCategoryRequest'
       responses:
         '200':
-          description: Product removed
+          description: Product removed from category successfully
+        '403':
+          description: Permission denied
+        '404':
+          description: Product or category not found
 
   /categories/{category_name}/products:
     get:
       tags: [Categories]
-      summary: Get products by category
+      summary: Get products by category (public)
+      security: []
       parameters:
         - in: path
           name: category_name
@@ -711,18 +893,25 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object # Simplified response schema
-                  properties:
-                    product:
-                      $ref: '#/components/schemas/ProductResponse'
-                    category:
-                      $ref: '#/components/schemas/CategoryResponse'
+                  $ref: '#/components/schemas/ProductResponse'
+        '404':
+          description: Category not found
 
   # --- Orders ---
   /orders:
     get:
       tags: [Orders]
-      summary: Get all orders
+      summary: Get all orders (Admin)
+      description: >-
+        Optional ?status= filter (Pending, Accepted, Ready, Completed,
+        Cancelled); unknown values return an empty list.
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [Pending, Accepted, Ready, Completed, Cancelled]
+          required: false
       responses:
         '200':
           description: List of orders
@@ -732,9 +921,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/OrderResponse'
+        '403':
+          description: Admin permission required
     post:
       tags: [Orders]
-      summary: Create order
+      summary: Create order (public, optional JWT)
+      description: >-
+        No JWT creates a guest order (user_id null). A valid JWT attributes
+        the order to the user; an invalid JWT is rejected with 401. Returns
+        the order plus a signed order_url receipt link.
+      security:
+        - {}
       requestBody:
         content:
           application/json:
@@ -743,16 +940,42 @@ paths:
       responses:
         '201':
           description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateOrderResponse'
+        '400':
+          description: Failed to create order (check products)
+        '401':
+          description: Invalid JWT provided
 
   /orders/{id}:
     get:
       tags: [Orders]
+      summary: Get order by ID
+      description: >-
+        Access: Admin, the JWT owner of the order, or anyone holding a valid
+        signed order_url (exp + sig query params, no JWT required).
+      security:
+        - {}
       parameters:
         - in: path
           name: id
           schema:
             type: integer
           required: true
+        - in: query
+          name: exp
+          schema:
+            type: integer
+          required: false
+          description: Expiry unix timestamp from the signed order_url
+        - in: query
+          name: sig
+          schema:
+            type: string
+          required: false
+          description: Hex HMAC-SHA256 signature over "order_id={id}&exp={exp}"
       responses:
         '200':
           description: Order details
@@ -760,9 +983,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrderResponse'
+        '400':
+          description: Invalid (tampered) order url
+        '403':
+          description: Permission denied (no valid token or order_url)
+        '404':
+          description: Order not found
+        '410':
+          description: Order url expired
     post:
       tags: [Orders]
-      summary: Update order status
+      summary: Update order status (Admin / kitchen)
       parameters:
         - in: path
           name: id
@@ -776,11 +1007,102 @@ paths:
               $ref: '#/components/schemas/UpdateOrderStatusRequest'
       responses:
         '200':
-          description: Status updated
+          description: Order status updated
+        '400':
+          description: Missing or invalid status value
+        '403':
+          description: Admin permission required
+        '404':
+          description: Order not found
+    delete:
+      tags: [Orders]
+      summary: Delete order (Admin)
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Order deleted
+        '403':
+          description: Admin permission required
+        '404':
+          description: Order not found
+
+  /orders/{id}/cancel:
+    post:
+      tags: [Orders]
+      summary: Cancel order (JWT owner or Admin)
+      description: Guest orders (user_id null) can only be cancelled by an Admin.
+      security:
+        - {}
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Order cancelled
+        '403':
+          description: Permission denied
+        '404':
+          description: Order not found
+
+  /orders/{id}/pay:
+    post:
+      tags: [Orders]
+      summary: Pay order - mock payment (Admin or valid order_url)
+      description: >-
+        Deterministic mock: succeeds unless total_amount exceeds
+        MAX_PAYMENT_AMOUNT (default 1000.00), which reports
+        payment_status "failed" with HTTP 200. Already-paid orders return 409.
+        The JWT owner's token alone does not grant payment.
+      security:
+        - {}
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+        - in: query
+          name: exp
+          schema:
+            type: integer
+          required: false
+          description: Expiry unix timestamp from the signed order_url
+        - in: query
+          name: sig
+          schema:
+            type: string
+          required: false
+          description: Hex HMAC-SHA256 signature over "order_id={id}&exp={exp}"
+      responses:
+        '200':
+          description: Payment processed (paid or failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayOrderResponse'
+        '400':
+          description: Invalid (tampered) order url
+        '403':
+          description: Permission denied (no valid token or order_url)
+        '404':
+          description: Order not found
+        '409':
+          description: Order already paid
+        '410':
+          description: Order url expired
 
   /orders/user/{username}:
     get:
       tags: [Orders]
+      summary: Get orders by username (self or Admin)
       parameters:
         - in: path
           name: username
@@ -796,10 +1118,15 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/OrderResponse'
+        '403':
+          description: Permission denied
+        '404':
+          description: User not found
 
   /orders/role/{role_name}:
     get:
       tags: [Orders]
+      summary: Get orders by role (Admin)
       parameters:
         - in: path
           name: role_name
@@ -815,3 +1142,32 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/OrderResponse'
+        '403':
+          description: Admin permission required
+
+  # --- QR ---
+  /qr/ordering:
+    get:
+      tags: [QR]
+      summary: Get ordering QR code (Admin)
+      description: >-
+        SVG QR code (image/svg+xml) encoding {API_BASE_URL}/api/v1/qr/visit.
+      responses:
+        '200':
+          description: QR code as SVG
+          content:
+            image/svg+xml:
+              schema:
+                type: string
+        '403':
+          description: Admin permission required
+
+  /qr/visit:
+    get:
+      tags: [QR]
+      summary: Visit redirect (public)
+      description: 302 Found redirect to ORDERING_BASE_URL (the ordering frontend).
+      security: []
+      responses:
+        '302':
+          description: Redirect to the ordering page
