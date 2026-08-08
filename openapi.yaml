@@ -59,8 +59,7 @@ components:
       properties:
         user_id:
           type: integer
-          nullable: true
-          description: Only included for admins
+          description: Present only when viewing own profile or as admin (omitted otherwise)
         username:
           type: string
         role:
@@ -86,6 +85,12 @@ components:
           items:
             type: string
             enum: [READ, WRITE, DELETE, ADMIN]
+        created_at:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          nullable: true
 
     NewRoleDTO:
       type: object
@@ -219,8 +224,7 @@ components:
       properties:
         category_id:
           type: integer
-          nullable: true
-          description: Hidden (null) on public category listing
+          description: Omitted on public category listing
         name:
           type: string
         description:
@@ -228,10 +232,10 @@ components:
           nullable: true
         created_at:
           type: string
-          nullable: true
+          description: Omitted on public category listing
         updated_at:
           type: string
-          nullable: true
+          description: Omitted on public category listing
 
     AssignCategoryRequest:
       type: object
@@ -306,6 +310,7 @@ components:
           type: string
         status:
           type: string
+          nullable: true
           enum: [Pending, Accepted, Ready, Completed, Cancelled]
         payment_status:
           type: string
@@ -398,6 +403,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Invalid or missing token
         '404':
           description: User not found
 
@@ -780,7 +787,7 @@ paths:
     get:
       tags: [Categories]
       summary: Get all categories (public)
-      description: category_id and timestamps are null on public responses.
+      description: category_id and timestamps are omitted (keys absent) on public responses.
       security: []
       responses:
         '200':

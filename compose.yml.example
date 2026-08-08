@@ -20,6 +20,9 @@ services:
       timeout: 5s
       retries: 10
 
+  # The container does not run migrations itself: apply them before first
+  # start, e.g. `diesel migration run` against the db container (or apply
+  # schema.sql) once the db is healthy.
   arrow_server:
     build: .
     container_name: arrow_server

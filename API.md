@@ -267,10 +267,10 @@ All role endpoints are **Admin only** (401 without a token, 403 without the ADMI
 * **URL:** `/categories`
 * **Method:** `GET`
 * **Auth Required:** No
-* **Response 200** — `Vec<CategoryResponse>`. Public responses hide `category_id` and timestamps (`null`):
+* **Response 200** — `Vec<CategoryResponse>`. Public responses omit `category_id` and timestamps (keys absent from the JSON, not `null`):
     ```json
     [
-      { "category_id": null, "name": "Burgers", "description": "Hand-made burgers", "created_at": null, "updated_at": null }
+      { "name": "Burgers", "description": "Hand-made burgers" }
     ]
     ```
 
