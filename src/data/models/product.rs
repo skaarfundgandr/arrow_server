@@ -13,8 +13,8 @@ pub struct Product {
     pub product_image_uri: Option<String>,
     pub description: Option<String>,
     pub price: BigDecimal,
-    pub created_at: Option<chrono::NaiveDateTime>,
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
 }
 
 #[derive(Insertable, PartialEq, Debug)]

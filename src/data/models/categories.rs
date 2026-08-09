@@ -10,8 +10,8 @@ pub struct Category {
     pub category_id: i32,
     pub name: String,
     pub description: Option<String>,
-    pub created_at: Option<chrono::NaiveDateTime>,
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
 }
 
 #[derive(Insertable, PartialEq, Debug)]

@@ -15,8 +15,8 @@ pub struct Role {
     pub name: String,
     pub permissions: Option<PermissionString>,
     pub description: Option<String>,
-    pub created_at: Option<chrono::NaiveDateTime>,
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
 }
 
 impl Role {

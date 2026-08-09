@@ -13,8 +13,8 @@ use diesel::prelude::*;
 pub struct ProductCategory {
     pub product_id: i32,
     pub category_id: i32,
-    pub created_at: Option<chrono::NaiveDateTime>,
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
 }
 
 #[derive(Insertable, PartialEq, Debug)]

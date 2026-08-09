@@ -12,8 +12,8 @@ diesel::table! {
         #[max_length = 255]
         name -> Varchar,
         description -> Nullable<Text>,
-        created_at -> Nullable<Timestamp>,
-        updated_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
     }
 }
 
@@ -24,8 +24,8 @@ diesel::table! {
         quantity -> Integer,
         unit_price -> Decimal,
         line_total -> Nullable<Decimal>,
-        created_at -> Nullable<Timestamp>,
-        updated_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
     }
 }
 
@@ -36,8 +36,8 @@ diesel::table! {
         total_amount -> Decimal,
         #[max_length = 50]
         status -> Varchar,
-        created_at -> Nullable<Timestamp>,
-        updated_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
         #[max_length = 20]
         payment_status -> Varchar,
     }
@@ -47,8 +47,8 @@ diesel::table! {
     product_categories (product_id, category_id) {
         product_id -> Integer,
         category_id -> Integer,
-        created_at -> Nullable<Timestamp>,
-        updated_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
     }
 }
 
@@ -61,8 +61,8 @@ diesel::table! {
         product_image_uri -> Nullable<Varchar>,
         description -> Nullable<Text>,
         price -> Decimal,
-        created_at -> Nullable<Timestamp>,
-        updated_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
     }
 }
 
@@ -77,8 +77,8 @@ diesel::table! {
         #[max_length = 23]
         permissions -> Nullable<RolesPermissionsSet>,
         description -> Nullable<Text>,
-        created_at -> Nullable<Timestamp>,
-        updated_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
     }
 }
 
@@ -86,8 +86,8 @@ diesel::table! {
     user_roles (user_id, role_id) {
         role_id -> Integer,
         user_id -> Integer,
-        created_at -> Nullable<Timestamp>,
-        updated_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
     }
 }
 
@@ -98,8 +98,8 @@ diesel::table! {
         username -> Varchar,
         #[max_length = 255]
         password_hash -> Varchar,
-        created_at -> Nullable<Timestamp>,
-        updated_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
     }
 }
 

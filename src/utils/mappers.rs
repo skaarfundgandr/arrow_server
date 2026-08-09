@@ -82,12 +82,8 @@ impl From<Role> for RoleDTO {
             name: user_role.name.clone(),
             permissions,
             description: user_role.description,
-            created_at: user_role
-                .created_at
-                .map(|dt| dt.format("%d/%m/%Y").to_string()),
-            updated_at: user_role
-                .updated_at
-                .map(|dt| dt.format("%d/%m/%Y").to_string()),
+            created_at: Some(user_role.created_at.format("%d/%m/%Y").to_string()),
+            updated_at: Some(user_role.updated_at.format("%d/%m/%Y").to_string()),
         }
     }
 }
@@ -159,8 +155,8 @@ impl From<(Order, Vec<(OrderProduct, Product)>)> for OrderResponse {
             total_amount: order.total_amount,
             status: Some(order.status),
             payment_status: order.payment_status,
-            created_at: order.created_at.map(|d| d.to_string()),
-            updated_at: order.updated_at.map(|d| d.to_string()),
+            created_at: Some(order.created_at.to_string()),
+            updated_at: Some(order.updated_at.to_string()),
         }
     }
 }
@@ -186,8 +182,8 @@ impl From<Category> for CategoryResponse {
             category_id: Some(category.category_id),
             name: category.name,
             description: category.description,
-            created_at: category.created_at.map(|d| d.to_string()),
-            updated_at: category.updated_at.map(|d| d.to_string()),
+            created_at: Some(category.created_at.to_string()),
+            updated_at: Some(category.updated_at.to_string()),
         }
     }
 }

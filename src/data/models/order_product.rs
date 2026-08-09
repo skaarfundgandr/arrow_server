@@ -17,8 +17,8 @@ pub struct OrderProduct {
     pub quantity: i32,
     pub unit_price: BigDecimal,
     pub line_total: Option<BigDecimal>,
-    pub created_at: Option<chrono::NaiveDateTime>,
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
 }
 
 #[derive(Insertable, PartialEq, Debug)]

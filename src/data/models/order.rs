@@ -14,8 +14,8 @@ pub struct Order {
     pub user_id: Option<i32>,
     pub total_amount: BigDecimal,
     pub status: String,
-    pub created_at: Option<chrono::NaiveDateTime>,
-    pub updated_at: Option<chrono::NaiveDateTime>,
+    pub created_at: chrono::NaiveDateTime,
+    pub updated_at: chrono::NaiveDateTime,
     pub payment_status: String,
 }
 

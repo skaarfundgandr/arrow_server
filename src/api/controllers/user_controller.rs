@@ -219,8 +219,8 @@ async fn user_to_dto(user: &User, include_id: bool) -> UserDTO {
         user_id: if include_id { Some(user.user_id) } else { None },
         username: user.username.clone(),
         role,
-        created_at: user.created_at.map(|dt| dt.format("%d/%m/%Y").to_string()),
-        updated_at: user.updated_at.map(|dt| dt.format("%d/%m/%Y").to_string()),
+        created_at: Some(user.created_at.format("%d/%m/%Y").to_string()),
+        updated_at: Some(user.updated_at.format("%d/%m/%Y").to_string()),
     }
 }
 
