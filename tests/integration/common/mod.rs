@@ -215,3 +215,39 @@ pub async fn add_order_product(order_id: i32, product_id: i32, quantity: i32, un
     .await
     .expect("Failed to add order product");
 }
+
+static CUSTOMER_ROLE: Once = Once::new();
+
+pub async fn ensure_customer_role() {
+    CUSTOMER_ROLE.call_once(|| {
+        std::thread::spawn(|| {
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
+                .enable_all()
+                .build()
+                .expect("Failed to build CUSTOMER role runtime");
+            rt.block_on(async {
+                let repo = RoleRepo::new();
+                if repo.get_by_name("CUSTOMER").await.ok().flatten().is_some() {
+                    return;
+                }
+                if repo
+                    .add(NewRole {
+                        name: "CUSTOMER",
+                        description: Some("Default customer role"),
+                    })
+                    .await
+                    .is_err()
+                {
+                    return;
+                }
+                if let Ok(Some(role)) = repo.get_by_name("CUSTOMER").await {
+                    let _ = repo.set_permissions(role.role_id, RolePermissions::Write).await;
+                }
+            });
+            std::mem::forget(rt);
+        })
+        .join()
+        .expect("CUSTOMER role pre-seed thread panicked");
+    });
+}

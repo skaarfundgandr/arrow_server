@@ -5,7 +5,7 @@ ARROW (**A**synchronous **R**ust **R**estaurant **O**rder **W**orkflow) Server: 
 ## Commands
 
 - Build/run: `cargo build`, `cargo run` (binds `0.0.0.0:3000`, all routes nested under `/api/v1/*`, CORS allow-any)
-- Tests: `cargo test` — integration tests in `tests/` hit a **real MySQL** instance via `DATABASE_URL`; use `cargo test -- --test-threads=1` (DB-shared tests are annotated `#[serial_test::serial]`)
+- Tests: `cargo test` — one integration binary at `tests/integration/` hitting a **real MySQL** instance via `DATABASE_URL`; the suite is fully parallel (no `--test-threads=1` needed). Test rows accumulate in the shared DB — periodically reset with `scripts/cleanup_test_db.sql` (TRUNCATE children-first; re-seed happens on next server start / test run)
 - Migrations: `diesel migration run`, `diesel migration generate NAME` — stored in the non-standard dir `src/data/migrations` (per `diesel.toml`); after schema changes run `diesel print-schema` (writes `src/data/models/schema.rs`)
 - CI (`.github/workflows/rust.yml`) only runs `cargo build` on master — no clippy/fmt/test gate
 
@@ -13,7 +13,7 @@ ARROW (**A**synchronous **R**ust **R**estaurant **O**rder **W**orkflow) Server: 
 
 - Deny lints live in `[lints.clippy]` in Cargo.toml (package-wide): `unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented`
 - `src/` must stay clippy-clean with NO `#[allow(...)]` annotations — errors are handled via typed error enums (hand-written `Display`/`std::error::Error` impls), never suppressed
-- Tests are exempt via a crate-level `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]` at the top of each file in `tests/`; tests always live in `tests/` (no `#[cfg(test)]` in `src/`)
+- Tests are exempt via one crate-level `#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]` at the root of the single test binary (`tests/integration/main.rs`); tests always live in `tests/` (no `#[cfg(test)]` in `src/`)
 - No `clippy.toml` — all lint configuration lives in Cargo.toml
 - Clippy is local-only today: CI runs `cargo build` only
 
@@ -36,6 +36,7 @@ ARROW (**A**synchronous **R**ust **R**estaurant **O**rder **W**orkflow) Server: 
 - CPU-bound work (argon2 hashing in `AuthService`) goes through `tokio::task::spawn_blocking`
 - Rate limiting (`tower_governor`) is configured in `src/api/server.rs` only: `GovernorLayer` applied to the nested auth and orders routers, tunables are `const`s at the top of that file. `SmartIpKeyExtractor` trusts `X-Forwarded-For`/`X-Real-IP`/`Forwarded` (spoofable if the app is reachable without the ACA ingress in front — acceptable for demo)
 - Adding an entity: migration → run → `diesel print-schema` → three model structs → repo trait impl → service → controller/DTO → route; wire each in the matching `mod.rs`
+- Integration tests own their fixtures: every row is created through the factories in `tests/integration/common/mod.rs` with `uniq()`-generated names, tests assert only on rows they created, and nothing ever wipes tables (rows accumulate in the shared DB). The only `#[serial_test::serial(admin_seed)]` tests are the ones touching the fixed env-admin row (seed/login/register-conflict in `user_controller_tests.rs`). One canonical test per behavior lives at the lowest layer that exercises it: repo = CRUD/constraints, service = permissions/business rules, controller = HTTP contract only
 
 ## Docs
 
