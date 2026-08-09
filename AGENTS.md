@@ -20,12 +20,14 @@ ARROW (**A**synchronous **R**ust **R**estaurant **O**rder **W**orkflow) Server: 
 ## Setup
 
 - Required env, loaded from `.env` via dotenvy in `src/data/database.rs`: `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRATION_MINUTES` — see `.env.example` and `compose.yml.example` (local MySQL)
+- Optional Azure Blob Storage env (all in `src/api/config.rs`): `AZURE_STORAGE_ACCOUNT`, `AZURE_STORAGE_CONTAINER`, `AZURE_STORAGE_ACCOUNT_KEY` (dev SAS signing), `IMAGE_SAS_TTL_MINUTES`, `IMAGE_MAX_BYTES` — unset account/container disables the store (image endpoints return 503); tests run without Azure via the `StubBlobStore` in `tests/integration/common/mod.rs`
 - `Database::new()` is cheap: it clones a handle to a global `once_cell::sync::Lazy` deadpool pool; call `get_connection().await` per operation
 - Lib crate is named `arrow_server_lib` — integration tests import it that way, not `arrow_server`
 
 ## Architecture
 
 - Layered: `src/api/` (controllers + `dto/`, `routes/`, `extractors.rs` `AccessClaims`, `server.rs`) → `src/services/` (stateless business logic) → `src/data/` (`database.rs`, `models/`, `repos/`), plus `src/security/` (JWT in `jwt.rs`, argon2 in `auth.rs`)
+- Blob storage behind a trait: `BlobStore` in `src/services/blob_storage_service.rs` (`AzureBlobStore` impl = azure_storage_blob + hand-rolled service SAS; `BlobStoreError` typed errors); `ProductService::with_blob_store(Arc<dyn BlobStore>)` injects a stub in tests, `new()` builds the production store lazily
 - Repository pattern: `Repository` trait in `src/data/repos/traits/repository.rs` uses GATs (`type NewItem<'a>`, `type UpdateForm<'a>`, `Id = i32`); concrete impls live in `src/data/repos/implementors/` with `#[async_trait]`
 - Each entity in `src/data/models/` has three structs: `Xxx` (`Queryable, Selectable, Identifiable`), `NewXxx<'a>` (`Insertable`), `UpdateXxx<'a>` (`AsChangeset`); DTO ↔ model conversions are `From` impls in `src/utils/mappers.rs`
 

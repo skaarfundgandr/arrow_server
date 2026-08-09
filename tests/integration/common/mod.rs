@@ -16,12 +16,15 @@ use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
 use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
+use arrow_server_lib::services::blob_storage_service::{BlobStore, BlobStoreError};
+use async_trait::async_trait;
 use bigdecimal::BigDecimal;
 use diesel_async::pooled_connection::deadpool::Object;
 use diesel_async::AsyncMysqlConnection;
 use std::str::FromStr;
+use std::sync::Mutex;
 use std::sync::Once;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -217,7 +220,6 @@ pub async fn add_order_product(order_id: i32, product_id: i32, quantity: i32, un
 }
 
 static CUSTOMER_ROLE: Once = Once::new();
-
 pub async fn ensure_customer_role() {
     CUSTOMER_ROLE.call_once(|| {
         std::thread::spawn(|| {
@@ -250,4 +252,87 @@ pub async fn ensure_customer_role() {
         .join()
         .expect("CUSTOMER role pre-seed thread panicked");
     });
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum BlobCall {
+    Upload { bytes_len: usize, content_type: String },
+    Delete { blob_name: String },
+    Mint { blob_name: String, ttl_minutes: u64 },
+}
+
+#[derive(Debug, Default)]
+pub struct StubBlobStore {
+    calls: Mutex<Vec<BlobCall>>,
+    name_counter: AtomicU64,
+    fail_deletes: AtomicBool,
+}
+
+impl StubBlobStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn fail_deletes(&self, fail: bool) {
+        self.fail_deletes.store(fail, Ordering::SeqCst);
+    }
+
+    pub fn calls(&self) -> Vec<BlobCall> {
+        self.calls.lock().unwrap().clone()
+    }
+}
+
+#[async_trait]
+impl BlobStore for StubBlobStore {
+    async fn upload(&self, bytes: &[u8], content_type: &str) -> Result<String, BlobStoreError> {
+        self.calls.lock().unwrap().push(BlobCall::Upload {
+            bytes_len: bytes.len(),
+            content_type: content_type.to_string(),
+        });
+        let n = self.name_counter.fetch_add(1, Ordering::Relaxed);
+        Ok(format!("products/00000000-0000-4000-8000-{:012}.png", n))
+    }
+
+    async fn delete(&self, blob_name: &str) -> Result<(), BlobStoreError> {
+        self.calls.lock().unwrap().push(BlobCall::Delete {
+            blob_name: blob_name.to_string(),
+        });
+        if self.fail_deletes.load(Ordering::SeqCst) {
+            Err(BlobStoreError::Delete("stub delete failure".to_string()))
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn mint_read_url(
+        &self,
+        blob_name: &str,
+        ttl_minutes: u64,
+    ) -> Result<String, BlobStoreError> {
+        self.calls.lock().unwrap().push(BlobCall::Mint {
+            blob_name: blob_name.to_string(),
+            ttl_minutes,
+        });
+        Ok(format!(
+            "https://stub.blob.core.windows.net/{blob_name}?sig=stub&ttl={ttl_minutes}"
+        ))
+    }
+}
+
+pub fn png_bytes() -> Vec<u8> {
+    vec![
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x01, 0x02, 0x03,
+    ]
+}
+
+pub fn jpeg_bytes() -> Vec<u8> {
+    vec![0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x01]
+}
+
+pub fn webp_bytes() -> Vec<u8> {
+    vec![b'R', b'I', b'F', b'F', 0, 0, 0, 0, b'W', b'E', b'B', b'P']
+}
+
+pub fn gif_bytes() -> Vec<u8> {
+    vec![b'G', b'I', b'F', b'8', b'9', b'a', 0, 0]
 }

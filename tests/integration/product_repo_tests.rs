@@ -111,7 +111,7 @@ async fn test_update_product() {
 
     let update_form = UpdateProduct {
         name: Some(&new_name),
-        product_image_uri: Some("/new.jpg"),
+        product_image_uri: Some(Some("/new.jpg")),
         description: Some("New description"),
         price: Some(BigDecimal::from_str("10.00").unwrap()),
     };

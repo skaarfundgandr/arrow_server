@@ -30,7 +30,7 @@ pub struct NewProduct<'a> {
 #[diesel(table_name = products)]
 pub struct UpdateProduct<'a> {
     pub name: Option<&'a str>,
-    pub product_image_uri: Option<&'a str>,
+    pub product_image_uri: Option<Option<&'a str>>,
     pub description: Option<&'a str>,
     pub price: Option<BigDecimal>,
 }

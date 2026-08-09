@@ -157,7 +157,7 @@ components:
           description: Decimal string
         product_image_uri:
           type: string
-          description: URL of an externally hosted image (no upload endpoint)
+          description: External image URL, or the blob path returned by POST /products/{id}/image
         categories:
           type: array
           items:
@@ -195,6 +195,9 @@ components:
         product_image_uri:
           type: string
           nullable: true
+          description: >-
+            External URL passed through as-is, or a short-lived read-only SAS
+            URL minted from the stored blob path (products/{uuid}.{ext}) on read.
         categories:
           type: array
           items:
@@ -781,6 +784,70 @@ paths:
           description: Permission denied
         '404':
           description: Product not found
+
+  /products/{id}/image:
+    post:
+      tags: [Products]
+      summary: Upload product image (WRITE permission or Admin)
+      description: >-
+        Multipart upload of a single file field named "file". The image type is
+        validated server-side from magic bytes (jpeg/png/webp); the blob's
+        Content-Type is set from the validated type. Rejects oversize uploads
+        (IMAGE_MAX_BYTES) and returns 503 when object storage is not configured.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Product image uploaded; blob path stored in product_image_uri
+        '400':
+          description: Missing/extra fields, unsupported image type, or image too large
+        '401':
+          description: Missing or invalid token
+        '403':
+          description: Permission denied
+        '404':
+          description: Product not found
+        '503':
+          description: Object storage not configured
+    delete:
+      tags: [Products]
+      summary: Delete product image (Admin)
+      description: >-
+        Deletes the uploaded blob (when the stored value is a blob path) and
+        nulls product_image_uri. Returns 503 when object storage is not
+        configured.
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: integer
+          required: true
+      responses:
+        '200':
+          description: Product image deleted
+        '401':
+          description: Missing or invalid token
+        '403':
+          description: Admin permission required
+        '404':
+          description: Product not found
+        '503':
+          description: Object storage not configured
 
   # --- Categories ---
   /categories:

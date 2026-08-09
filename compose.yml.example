@@ -39,6 +39,14 @@ services:
       - API_BASE_URL=http://localhost:3000
       - ORDERING_BASE_URL=http://localhost:3000/api/v1/products
       - MAX_PAYMENT_AMOUNT=1000.00
+      # Optional: Azure Blob Storage for product image uploads (see .env.example).
+      # Uncomment and fill in to enable image upload; without it the image
+      # endpoints return 503.
+      # - AZURE_STORAGE_ACCOUNT=your_storage_account
+      # - AZURE_STORAGE_CONTAINER=products
+      # - AZURE_STORAGE_ACCOUNT_KEY=your_account_key
+      # - IMAGE_SAS_TTL_MINUTES=15
+      # - IMAGE_MAX_BYTES=2097152
     depends_on:
       db:
         condition: service_healthy

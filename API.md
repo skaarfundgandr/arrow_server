@@ -22,6 +22,8 @@ Machine-readable specification: [openapi.yaml](openapi.yaml).
 | `GET/POST/PATCH/DELETE /roles...` (all) | | | | ✔ |
 | `GET /products`, `GET /products/{id}` | ✔ | | | |
 | `POST /products`, `PUT /products/{id}`, `DELETE /products/{id}` | | ✔ (WRITE/DELETE permission) | | |
+| `POST /products/{id}/image` | | ✔ (WRITE permission) | | |
+| `DELETE /products/{id}/image` | | | | ✔ |
 | `GET /categories`, `GET /categories/{name}/products` | ✔ | | | |
 | `POST /categories`, `PUT /categories/{id}`, `DELETE /categories/{id}`, `POST /categories/product[/remove]` | | ✔ (WRITE permission) | | |
 | `POST /auth/register`, `POST /orders`, `GET /qr/visit` | ✔ | | | |
@@ -258,6 +260,30 @@ All role endpoints are **Admin only** (401 without a token, 403 without the ADMI
 * **Method:** `DELETE`
 * **Auth Required:** Yes (DELETE permission or Admin)
 * **Response 200** `"Product deleted"` · **Errors:** 401, 403, 404
+
+### Upload Product Image
+Uploads an image to Azure Blob Storage (a **private** container) through the backend. The image MIME type is validated **server-side from the file's magic bytes** (JPEG/PNG/WebP only) and the blob's `Content-Type` is set from that validated type — the client-declared `Content-Type` is never trusted. The image is rejected when the declared type contradicts the magic bytes, when it is not jpg/png/webp, or when the upload exceeds `IMAGE_MAX_BYTES` (default 2 MiB).
+
+* **URL:** `/products/{id}/image`
+* **Method:** `POST`
+* **Auth Required:** Yes (WRITE permission or Admin)
+* **Content-Type:** `multipart/form-data`
+* **Body:** a single file field named `file` (any filename).
+* **Response 200** `"Product image uploaded"` — the blob path is stored in `product_image_uri`; a replacement upload deletes the previous blob.
+* **Errors:** 400 (missing/extra fields, unsupported image type, image too large), 401, 403, 404, 503 (storage not configured), 500
+
+### Delete Product Image
+* **URL:** `/products/{id}/image`
+* **Method:** `DELETE`
+* **Auth Required:** Yes (Admin)
+* **Response 200** `"Product image deleted"` — the blob is deleted (when present) and `product_image_uri` is set to `null`.
+* **Errors:** 401, 403, 404, 503 (storage not configured), 500
+
+### `product_image_uri` semantics
+
+* A value matching the blob-path shape (`products/{uuid}.{ext}`) is a reference to an uploaded image; the read endpoints (`GET /products`, `GET /products/{id}`) replace it with a freshly minted, short-lived **read-only SAS URL** (`IMAGE_SAS_TTL_MINUTES`, default 15). SAS URLs are never stored in the database.
+* Any other value (a legacy external URL) is passed through unchanged.
+* When storage is not configured, blob-path values pass through as-is and the upload/delete endpoints return **503**.
 
 ---
 

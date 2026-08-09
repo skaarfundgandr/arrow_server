@@ -1,3 +1,4 @@
+pub mod blob_storage_service;
 pub mod errors;
 pub mod order_service;
 pub mod product_category_service;

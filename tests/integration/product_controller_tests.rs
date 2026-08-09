@@ -1,6 +1,7 @@
 use arrow_server_lib::api::controllers::dto::user_dto::UserDTO;
 use arrow_server_lib::api::controllers::product_controller::{
-    create_product, delete_product, get_all_products, get_product_by_id, update_product,
+    create_product, delete_product, delete_product_image, get_all_products, get_product_by_id,
+    update_product, upload_product_image,
 };
 use arrow_server_lib::api::response::ProductResponse;
 use arrow_server_lib::data::models::roles::RolePermissions;
@@ -8,16 +9,22 @@ use arrow_server_lib::data::repos::implementors::product_repo::ProductRepo;
 use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::jwt::JwtService;
+use arrow_server_lib::services::blob_storage_service::BlobStore;
+use axum::Extension;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::{delete, get, patch, post};
 use http_body_util::BodyExt;
 use serde_json::json;
+use std::sync::Arc;
 
 use tower::ServiceExt;
 
-use crate::common::{create_category, create_product as make_product, create_user_with_role, uniq};
+use crate::common::{
+    create_category, create_product as make_product, create_user_with_role, png_bytes, uniq,
+    StubBlobStore,
+};
 
 async fn create_token_user(role_name: &str, permission: RolePermissions) -> String {
     let (user, role) = create_user_with_role(&uniq("prod-user"), role_name).await;
@@ -46,6 +53,18 @@ fn app() -> Router {
         .route("/products/{id}", get(get_product_by_id))
         .route("/products/{id}", patch(update_product))
         .route("/products/{id}", delete(delete_product))
+}
+
+fn app_with_blob_store(store: Arc<dyn BlobStore>) -> Router {
+    Router::new()
+        .route("/products", get(get_all_products))
+        .route("/products", post(create_product))
+        .route("/products/{id}", get(get_product_by_id))
+        .route("/products/{id}", patch(update_product))
+        .route("/products/{id}", delete(delete_product))
+        .route("/products/{id}/image", post(upload_product_image))
+        .route("/products/{id}/image", delete(delete_product_image))
+        .layer(Extension(store))
 }
 
 #[tokio::test]
@@ -291,4 +310,145 @@ async fn test_get_product_by_id_public_no_auth() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let product_resp: ProductResponse = serde_json::from_slice(&body).unwrap();
     assert_eq!(product_resp.name, product.name);
+}
+
+#[tokio::test]
+async fn test_upload_product_image_requires_auth() {
+    let product = make_product(&uniq("NoAuthImageProduct")).await;
+    let store: Arc<dyn BlobStore> = Arc::new(StubBlobStore::new());
+
+    let response = app_with_blob_store(store)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/products/{}/image", product.product_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_delete_product_image_requires_auth() {
+    let product = make_product(&uniq("NoAuthImageDelete")).await;
+    let store: Arc<dyn BlobStore> = Arc::new(StubBlobStore::new());
+
+    let response = app_with_blob_store(store)
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/products/{}/image", product.product_id))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_upload_product_image_success() {
+    let token = create_token_user(&uniq("prod-img-writer"), RolePermissions::Write).await;
+    let product = make_product(&uniq("ImageUploadProduct")).await;
+    let store: Arc<dyn BlobStore> = Arc::new(StubBlobStore::new());
+
+    let boundary = "arrow-boundary-12345";
+    let png = png_bytes();
+    let mut body = Vec::new();
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"img.png\"\r\nContent-Type: image/png\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(&png);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+    let response = app_with_blob_store(store)
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/products/{}/image", product.product_id))
+                .header("Authorization", format!("Bearer {}", token))
+                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let stored = ProductRepo::new()
+        .get_by_id(product.product_id)
+        .await
+        .expect("Query failed")
+        .expect("Product not found");
+    assert!(stored.product_image_uri.is_some(), "Blob path should be stored");
+    assert!(stored
+        .product_image_uri
+        .unwrap()
+        .starts_with("products/"));
+}
+
+#[tokio::test]
+async fn test_delete_product_image_success() {
+    let token = create_token_user(&uniq("prod-img-admin"), RolePermissions::Admin).await;
+    let product = make_product(&uniq("ImageDeleteProduct")).await;
+    let store: Arc<dyn BlobStore> = Arc::new(StubBlobStore::new());
+    let app = app_with_blob_store(store.clone());
+
+    let boundary = "arrow-boundary-67890";
+    let mut body = Vec::new();
+    body.extend_from_slice(
+        format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"img.png\"\r\nContent-Type: image/png\r\n\r\n"
+        )
+        .as_bytes(),
+    );
+    body.extend_from_slice(&png_bytes());
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+
+    let upload = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/products/{}/image", product.product_id))
+                .header("Authorization", format!("Bearer {}", token.clone()))
+                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(upload.status(), StatusCode::OK);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!("/products/{}/image", product.product_id))
+                .header("Authorization", format!("Bearer {}", token))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let stored = ProductRepo::new()
+        .get_by_id(product.product_id)
+        .await
+        .expect("Query failed")
+        .expect("Product not found");
+    assert!(
+        stored.product_image_uri.is_none(),
+        "Image column should be nulled"
+    );
 }

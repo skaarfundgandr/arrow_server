@@ -11,6 +11,7 @@ Built with Rust, [Axum](https://crates.io/crates/axum), [diesel-async](https://c
 - **Signed receipt links** — every created order returns an `order_url` (HMAC-SHA256 signed, expiring). Anyone holding it can view and pay the order without an account; tampering → 400, expiry → 410.
 - **Env-seeded admin** — the admin account is created automatically at server startup from `ADMIN_USERNAME` / `ADMIN_PASSWORD` (idempotent). No manual DB insert needed.
 - **Deterministic mock payment** — payment succeeds unless the order total exceeds `MAX_PAYMENT_AMOUNT` (default 1000.00), which makes the failure path easy to demo and test.
+- **Azure Blob Storage product images** — uploads go into a private container through the backend (magic-byte MIME validation, size cap), and read endpoints return short-lived minted SAS URLs instead of the stored blob path.
 
 ## Technologies & Libraries
 
@@ -58,6 +59,11 @@ cp .env.example .env
 | `API_BASE_URL` | no | `http://localhost:3000` | Public API base URL used when building links/QRs |
 | `ORDERING_BASE_URL` | no | `{API_BASE_URL}/api/v1/products` | Redirect target of `GET /api/v1/qr/visit` |
 | `MAX_PAYMENT_AMOUNT` | no | `1000.00` | Order total above which mock payment fails |
+| `AZURE_STORAGE_ACCOUNT` | no | — | Azure storage account for product image uploads (unset → image endpoints return 503) |
+| `AZURE_STORAGE_CONTAINER` | no | — | Private container that holds uploaded product images |
+| `AZURE_STORAGE_ACCOUNT_KEY` | no | — | Dev account key: signs the short-lived SAS tokens (upload/delete/read); unset → managed identity auth, no SAS minting |
+| `IMAGE_SAS_TTL_MINUTES` | no | `15` | Lifetime of minted read SAS URLs in minutes |
+| `IMAGE_MAX_BYTES` | no | `2097152` | Maximum accepted product image size in bytes (2 MiB) |
 
 > Missing `DATABASE_URL`, `JWT_SECRET`, `ADMIN_PASSWORD` or `QR_SIGNING_SECRET` fails startup: the error is logged via `tracing` and the process exits with a non-zero status.
 
@@ -125,7 +131,7 @@ Base URL: `http://localhost:3000/api/v1` — full reference: [API.md](API.md), m
 | GET | `/qr/ordering` | SVG QR code (image/svg+xml) encoding `{API_BASE_URL}/api/v1/qr/visit` |
 | POST | `/users/create` · POST `/users/{id}` · DELETE `/users/{id}` | User management |
 | GET/POST/PATCH/DELETE | `/roles...` | Role & permission management |
-| POST | `/products` · PUT/DELETE `/products/{id}` | Product management |
+| POST | `/products` · PUT/DELETE `/products/{id}` · POST/DELETE `/products/{id}/image` | Product & product-image management |
 | POST | `/categories` · PUT/DELETE `/categories/{id}` · POST `/categories/product[/remove]` | Category management |
 
 ## How the QR Ordering Flow Works
@@ -214,6 +220,6 @@ arrow_server/
 
 ## Known Limitations
 
-- **Product images are URL-only today.** `product_image_uri` is a string pointing at an externally hosted image; object-storage upload (S3/MinIO etc.) is deferred and not part of this API.
+- Product images are uploaded to a **private Azure Blob Storage container** through `POST /products/{id}/image`; the read endpoints return short-lived read-only **SAS URLs** minted at request time (TTL `IMAGE_SAS_TTL_MINUTES`, default 15 min) instead of the stored blob path — SAS URLs are never persisted. Uploads require `AZURE_STORAGE_ACCOUNT`/`AZURE_STORAGE_CONTAINER` (and `AZURE_STORAGE_ACCOUNT_KEY` for SAS signing; without it uploads/deletes fall back to managed identity but read SAS URLs cannot be minted). When storage is not configured the image endpoints return 503 and legacy external `product_image_uri` values keep working unchanged.
 - Mock payments are deterministic and offline by design; no payment provider is integrated.
 - CORS currently allows any origin (`CorsLayer::allow_origin(Any)`) — tighten before production.

@@ -1,17 +1,56 @@
+use crate::api::config::Config;
 use crate::api::response::{CategoryResponse, ProductResponse};
 use crate::data::models::product::{NewProduct, UpdateProduct};
 use crate::data::models::roles::RolePermissions;
 use crate::data::repos::implementors::product_category_repo::ProductCategoryRepo;
 use crate::data::repos::implementors::product_repo::ProductRepo;
 use crate::data::repos::traits::repository::Repository;
+use crate::services::blob_storage_service::{
+    AzureBlobStore, BlobStore, BlobStoreError, is_blob_path,
+};
 use crate::services::errors::ProductServiceError;
 use bigdecimal::BigDecimal;
+use once_cell::sync::Lazy;
+use std::sync::Arc;
 
-pub struct ProductService;
+static PRODUCTION_BLOB_STORE: Lazy<Arc<dyn BlobStore>> = Lazy::new(|| {
+    Arc::new(AzureBlobStore::try_new().unwrap_or_else(|error| {
+        tracing::error!("Failed to initialize Azure Blob Storage: {}", error);
+        AzureBlobStore::disabled()
+    }))
+});
+
+struct ImageType {
+    mime: &'static str,
+}
+
+fn detect_image_type(bytes: &[u8]) -> Option<ImageType> {
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some(ImageType { mime: "image/jpeg" })
+    } else if bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
+        Some(ImageType { mime: "image/png" })
+    } else if bytes.len() >= 12 && &bytes[..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
+        Some(ImageType { mime: "image/webp" })
+    } else {
+        None
+    }
+}
+
+fn is_whitelisted_mime(mime: &str) -> bool {
+    matches!(mime, "image/jpeg" | "image/png" | "image/webp")
+}
+
+pub struct ProductService {
+    blob_store: Arc<dyn BlobStore>,
+}
 
 impl ProductService {
     pub fn new() -> Self {
-        ProductService
+        Self::with_blob_store(PRODUCTION_BLOB_STORE.clone())
+    }
+
+    pub fn with_blob_store(blob_store: Arc<dyn BlobStore>) -> Self {
+        ProductService { blob_store }
     }
 
     /// Gets all products without any permission check (public endpoint)
@@ -31,6 +70,8 @@ impl ProductService {
                     let mut response = ProductResponse::from(p);
                     response.categories =
                         self.get_categories_for_product(response.product_id).await?;
+                    response.product_image_uri =
+                        self.resolve_product_image(response.product_image_uri).await;
                     responses.push(response);
                 }
                 Ok(Some(responses))
@@ -64,6 +105,8 @@ impl ProductService {
                     let mut response = ProductResponse::from(p);
                     response.categories =
                         self.get_categories_for_product(response.product_id).await?;
+                    response.product_image_uri =
+                        self.resolve_product_image(response.product_image_uri).await;
                     responses.push(response);
                 }
                 Ok(Some(responses))
@@ -87,6 +130,8 @@ impl ProductService {
             Some(p) => {
                 let mut response = ProductResponse::from(p);
                 response.categories = self.get_categories_for_product(response.product_id).await?;
+                response.product_image_uri =
+                    self.resolve_product_image(response.product_image_uri).await;
                 Ok(Some(response))
             }
             None => Ok(None),
@@ -116,6 +161,8 @@ impl ProductService {
             Some(p) => {
                 let mut response = ProductResponse::from(p);
                 response.categories = self.get_categories_for_product(response.product_id).await?;
+                response.product_image_uri =
+                    self.resolve_product_image(response.product_image_uri).await;
                 Ok(Some(response))
             }
             None => Ok(None),
@@ -145,9 +192,32 @@ impl ProductService {
             Some(p) => {
                 let mut response = ProductResponse::from(p);
                 response.categories = self.get_categories_for_product(response.product_id).await?;
+                response.product_image_uri =
+                    self.resolve_product_image(response.product_image_uri).await;
                 Ok(Some(response))
             }
             None => Ok(None),
+        }
+    }
+
+    async fn resolve_product_image(&self, uri: Option<String>) -> Option<String> {
+        let uri = uri?;
+        if !is_blob_path(&uri) {
+            return Some(uri);
+        }
+        let ttl_minutes = match Config::get() {
+            Ok(config) => config.image_sas_ttl_minutes,
+            Err(error) => {
+                tracing::warn!("Cannot mint SAS URL for {}: {}", uri, error);
+                return Some(uri);
+            }
+        };
+        match self.blob_store.mint_read_url(&uri, ttl_minutes).await {
+            Ok(sas_url) => Some(sas_url),
+            Err(error) => {
+                tracing::warn!("Failed to mint SAS URL for {}: {}", uri, error);
+                Some(uri)
+            }
         }
     }
 
@@ -229,7 +299,7 @@ impl ProductService {
 
         let update = UpdateProduct {
             name,
-            product_image_uri: image_uri,
+            product_image_uri: image_uri.map(Some),
             description,
             price,
         };
@@ -256,24 +326,33 @@ impl ProductService {
         let repo = ProductRepo::new();
 
         // Verify product exists
-        repo.get_by_id(product_id)
+        let product = repo
+            .get_by_id(product_id)
             .await
             .map_err(|_| ProductServiceError::DatabaseError)?
             .ok_or(ProductServiceError::ProductNotFound)?;
 
         repo.delete(product_id)
             .await
-            .map_err(|_| ProductServiceError::ProductDeletionFailed)
+            .map_err(|_| ProductServiceError::ProductDeletionFailed)?;
+
+        if let Some(uri) = product.product_image_uri.filter(|uri| is_blob_path(uri))
+            && let Err(error) = self.blob_store.delete(&uri).await
+        {
+            tracing::warn!("Failed to delete product image blob {}: {}", uri, error);
+        }
+
+        Ok(())
     }
 
-    /// Updates product image URI (requires WRITE permission or Admin)
-    /// This method is intended for use with Azure Blob Storage integration
-    pub async fn update_product_image(
+    /// Uploads a product image (requires WRITE permission or Admin)
+    pub async fn upload_product_image(
         &self,
         product_id: i32,
-        image_uri: &str,
+        bytes: &[u8],
+        declared_mime: Option<&str>,
         role_id: i32,
-    ) -> Result<(), ProductServiceError> {
+    ) -> Result<String, ProductServiceError> {
         if !self.has_permission(role_id, RolePermissions::Write).await?
             && !self.has_permission(role_id, RolePermissions::Admin).await?
         {
@@ -282,22 +361,101 @@ impl ProductService {
 
         let repo = ProductRepo::new();
 
-        // Verify product exists
-        repo.get_by_id(product_id)
+        let product = repo
+            .get_by_id(product_id)
             .await
             .map_err(|_| ProductServiceError::DatabaseError)?
             .ok_or(ProductServiceError::ProductNotFound)?;
 
+        let config = Config::get().map_err(|_| ProductServiceError::ConfigError)?;
+        if bytes.len() > config.image_max_bytes {
+            return Err(ProductServiceError::ImageTooLarge);
+        }
+
+        let image_type = detect_image_type(bytes).ok_or(ProductServiceError::InvalidImageType)?;
+        if let Some(declared) = declared_mime
+            && is_whitelisted_mime(declared)
+            && declared != image_type.mime
+        {
+            return Err(ProductServiceError::InvalidImageType);
+        }
+
+        let blob_name = self
+            .blob_store
+            .upload(bytes, image_type.mime)
+            .await
+            .map_err(map_blob_store_error)?;
+
+        if let Some(previous) = product
+            .product_image_uri
+            .as_deref()
+            .filter(|uri| is_blob_path(uri))
+            && let Err(error) = self.blob_store.delete(previous).await
+        {
+            tracing::warn!("Failed to delete replaced product image blob {}: {}", previous, error);
+        }
+
         let update = UpdateProduct {
             name: None,
-            product_image_uri: Some(image_uri),
+            product_image_uri: Some(Some(&blob_name)),
+            description: None,
+            price: None,
+        };
+
+        if repo.update(product_id, update).await.is_err() {
+            if let Err(cleanup_error) = self.blob_store.delete(&blob_name).await {
+                tracing::warn!(
+                    "Failed to roll back uploaded product image blob {}: {}",
+                    blob_name,
+                    cleanup_error
+                );
+            }
+            return Err(ProductServiceError::ImageUploadFailed);
+        }
+
+        Ok(blob_name)
+    }
+
+    /// Deletes a product image (requires ADMIN permission)
+    pub async fn delete_product_image(
+        &self,
+        product_id: i32,
+        role_id: i32,
+    ) -> Result<(), ProductServiceError> {
+        if !self.has_permission(role_id, RolePermissions::Admin).await? {
+            return Err(ProductServiceError::PermissionDenied);
+        }
+
+        let repo = ProductRepo::new();
+
+        let product = repo
+            .get_by_id(product_id)
+            .await
+            .map_err(|_| ProductServiceError::DatabaseError)?
+            .ok_or(ProductServiceError::ProductNotFound)?;
+
+        if let Some(blob_name) = product.product_image_uri.filter(|uri| is_blob_path(uri)) {
+            match self.blob_store.delete(&blob_name).await {
+                Ok(_) => {}
+                Err(BlobStoreError::NotConfigured) => {
+                    return Err(ProductServiceError::StorageNotConfigured);
+                }
+                Err(error) => {
+                    tracing::warn!("Failed to delete product image blob {}: {}", blob_name, error);
+                }
+            }
+        }
+
+        let update = UpdateProduct {
+            name: None,
+            product_image_uri: Some(None),
             description: None,
             price: None,
         };
 
         repo.update(product_id, update)
             .await
-            .map_err(|_| ProductServiceError::ProductUpdateFailed)
+            .map_err(|_| ProductServiceError::ImageDeletionFailed)
     }
 
     async fn has_permission(
@@ -315,6 +473,17 @@ impl ProductService {
             return Ok(role.has_permission(required_permission));
         }
         Ok(false)
+    }
+}
+
+fn map_blob_store_error(error: BlobStoreError) -> ProductServiceError {
+    match error {
+        BlobStoreError::NotConfigured => ProductServiceError::StorageNotConfigured,
+        BlobStoreError::SasUnavailable => ProductServiceError::StorageNotConfigured,
+        other => {
+            tracing::error!("Blob storage operation failed: {}", other);
+            ProductServiceError::ImageUploadFailed
+        }
     }
 }
 

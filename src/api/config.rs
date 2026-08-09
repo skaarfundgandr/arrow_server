@@ -14,6 +14,11 @@ pub struct Config {
     pub api_base_url: String,
     pub ordering_base_url: String,
     pub max_payment_amount: BigDecimal,
+    pub azure_storage_account: Option<String>,
+    pub azure_storage_container: Option<String>,
+    pub azure_storage_account_key: Option<String>,
+    pub image_sas_ttl_minutes: u64,
+    pub image_max_bytes: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +57,11 @@ impl Config {
         let ordering_base_url =
             Config::var_or("ORDERING_BASE_URL", &format!("{}/api/v1/products", api_base_url));
         let max_payment_amount = Config::var_or_parsed("MAX_PAYMENT_AMOUNT", "1000.00")?;
+        let azure_storage_account = Config::var_or_none("AZURE_STORAGE_ACCOUNT");
+        let azure_storage_container = Config::var_or_none("AZURE_STORAGE_CONTAINER");
+        let azure_storage_account_key = Config::var_or_none("AZURE_STORAGE_ACCOUNT_KEY");
+        let image_sas_ttl_minutes = Config::var_or_parsed("IMAGE_SAS_TTL_MINUTES", "15")?;
+        let image_max_bytes = Config::var_or_parsed("IMAGE_MAX_BYTES", "2097152")?;
 
         tracing::info!("Config loaded");
 
@@ -65,6 +75,11 @@ impl Config {
             api_base_url,
             ordering_base_url,
             max_payment_amount,
+            azure_storage_account,
+            azure_storage_container,
+            azure_storage_account_key,
+            image_sas_ttl_minutes,
+            image_max_bytes,
         })
     }
 
@@ -81,6 +96,10 @@ impl Config {
 
     fn var_or(name: &str, default: &str) -> String {
         std::env::var(name).unwrap_or_else(|_| default.to_string())
+    }
+
+    fn var_or_none(name: &str) -> Option<String> {
+        std::env::var(name).ok().filter(|value| !value.is_empty())
     }
 
     fn var_or_parsed<T: std::str::FromStr>(name: &str, default: &str) -> Result<T, ConfigError>

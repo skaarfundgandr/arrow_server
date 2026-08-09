@@ -1,13 +1,18 @@
+use crate::api::config::Config;
 use crate::api::request::{CreateProductRequest, UpdateProductRequest};
 use crate::api::response::ProductResponse;
 use crate::security::jwt::AccessClaims;
+use crate::services::blob_storage_service::BlobStore;
 use crate::services::errors::ProductServiceError;
 use crate::services::product_category_service::ProductCategoryService;
 use crate::services::product_service::ProductService;
+use axum::Extension;
 use axum::Json;
+use axum::extract::Multipart;
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
+use std::sync::Arc;
 
 // NOTE: Only write/delete operations require authentication. Reads are public.
 /// Get all products (public)
@@ -205,6 +210,144 @@ pub async fn delete_product(
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Failed to delete product",
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    (StatusCode::FORBIDDEN, "Permission denied").into_response()
+}
+
+/// Upload a product image (multipart field "file")
+pub async fn upload_product_image(
+    claims: AccessClaims,
+    Path(product_id): Path<i32>,
+    store: Option<Extension<Arc<dyn BlobStore>>>,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
+    let service = match store {
+        Some(Extension(store)) => ProductService::with_blob_store(store),
+        None => ProductService::new(),
+    };
+    let roles = claims.roles.unwrap_or_default();
+
+    if roles.is_empty() {
+        return (StatusCode::FORBIDDEN, "Permission denied").into_response();
+    }
+
+    let max_bytes = Config::get()
+        .map(|config| config.image_max_bytes)
+        .unwrap_or(2 * 1024 * 1024);
+
+    let mut bytes = Vec::new();
+    let mut declared_mime: Option<String> = None;
+    let mut file_count = 0usize;
+
+    loop {
+        let mut field = match multipart.next_field().await {
+            Ok(Some(field)) => field,
+            Ok(None) => break,
+            Err(_) => {
+                return (StatusCode::BAD_REQUEST, "Invalid multipart request").into_response();
+            }
+        };
+
+        match field.name() {
+            Some("file") => {
+                file_count += 1;
+                declared_mime = field.content_type().map(str::to_string);
+                loop {
+                    match field.chunk().await {
+                        Ok(Some(chunk)) => {
+                            bytes.extend_from_slice(&chunk);
+                            if bytes.len() > max_bytes {
+                                return (StatusCode::BAD_REQUEST, "Image too large")
+                                    .into_response();
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(_) => {
+                            return (StatusCode::BAD_REQUEST, "Invalid multipart request")
+                                .into_response();
+                        }
+                    }
+                }
+            }
+            _ => {
+                return (StatusCode::BAD_REQUEST, "Unexpected multipart field").into_response();
+            }
+        }
+    }
+
+    if file_count != 1 || bytes.is_empty() {
+        return (StatusCode::BAD_REQUEST, "A single file field is required").into_response();
+    }
+
+    for role_id in roles {
+        match service
+            .upload_product_image(product_id, &bytes, declared_mime.as_deref(), role_id as i32)
+            .await
+        {
+            Ok(_) => return (StatusCode::OK, "Product image uploaded").into_response(),
+            Err(ProductServiceError::PermissionDenied) => continue,
+            Err(ProductServiceError::ProductNotFound) => {
+                return (StatusCode::NOT_FOUND, "Product not found").into_response();
+            }
+            Err(ProductServiceError::ImageTooLarge) => {
+                return (StatusCode::BAD_REQUEST, "Image too large").into_response();
+            }
+            Err(ProductServiceError::InvalidImageType) => {
+                return (StatusCode::BAD_REQUEST, "Unsupported image type").into_response();
+            }
+            Err(ProductServiceError::StorageNotConfigured) => {
+                return (StatusCode::SERVICE_UNAVAILABLE, "Storage not configured")
+                    .into_response();
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to upload product image",
+                )
+                    .into_response();
+            }
+        }
+    }
+
+    (StatusCode::FORBIDDEN, "Permission denied").into_response()
+}
+
+/// Delete a product image (ADMIN only)
+pub async fn delete_product_image(
+    claims: AccessClaims,
+    Path(product_id): Path<i32>,
+    store: Option<Extension<Arc<dyn BlobStore>>>,
+) -> impl IntoResponse {
+    let service = match store {
+        Some(Extension(store)) => ProductService::with_blob_store(store),
+        None => ProductService::new(),
+    };
+    let roles = claims.roles.unwrap_or_default();
+
+    if roles.is_empty() {
+        return (StatusCode::FORBIDDEN, "Permission denied").into_response();
+    }
+
+    for role_id in roles {
+        match service.delete_product_image(product_id, role_id as i32).await {
+            Ok(_) => return (StatusCode::OK, "Product image deleted").into_response(),
+            Err(ProductServiceError::PermissionDenied) => continue,
+            Err(ProductServiceError::ProductNotFound) => {
+                return (StatusCode::NOT_FOUND, "Product not found").into_response();
+            }
+            Err(ProductServiceError::StorageNotConfigured) => {
+                return (StatusCode::SERVICE_UNAVAILABLE, "Storage not configured")
+                    .into_response();
+            }
+            Err(_) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to delete product image",
                 )
                     .into_response();
             }
