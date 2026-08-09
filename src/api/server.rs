@@ -5,6 +5,7 @@ use crate::api::routes::{
 };
 use axum::body::Body;
 use axum::extract::Request;
+use axum::http::HeaderValue;
 use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::get;
@@ -47,7 +48,7 @@ impl std::fmt::Display for ServerError {
 impl std::error::Error for ServerError {}
 
 pub async fn start() -> Result<(), ServerError> {
-    Config::get().map_err(ServerError::Config)?;
+    let config = Config::get().map_err(ServerError::Config)?;
 
     let database = crate::data::database::Database::new().await;
     database
@@ -89,7 +90,7 @@ pub async fn start() -> Result<(), ServerError> {
         tracing::warn!("Failed to seed admin user from environment: {}", e);
     }
 
-    let cors_layer = CorsLayer::new().allow_origin(Any);
+    let cors_layer = build_cors_layer(config)?;
     let router = Router::new()
         .route("/api", get(|| async { "Arrow Server API is running!" }))
         .nest(
@@ -119,6 +120,31 @@ pub async fn start() -> Result<(), ServerError> {
         .with_graceful_shutdown(shutdown_signal())
         .await
         .map_err(ServerError::Serve)
+}
+
+fn build_cors_layer(config: &Config) -> Result<CorsLayer, ServerError> {
+    if config
+        .cors_allowed_origins
+        .iter()
+        .any(|origin| origin == "*")
+    {
+        return Ok(CorsLayer::new().allow_origin(Any));
+    }
+
+    let origins = config
+        .cors_allowed_origins
+        .iter()
+        .map(|origin| {
+            origin.parse::<HeaderValue>().map_err(|error| {
+                ServerError::Config(crate::api::config::ConfigError::InvalidVar {
+                    name: "CORS_ALLOWED_ORIGINS".to_string(),
+                    reason: format!("invalid origin {origin:?}: {error}"),
+                })
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(CorsLayer::new().allow_origin(origins))
 }
 
 #[tracing::instrument(level = tracing::Level::TRACE, name = "axum", skip_all, fields(method=request.method().to_string(), uri=request.uri().to_string()))]

@@ -58,6 +58,7 @@ cp .env.example .env
 | `ORDER_LINK_EXPIRATION_MINUTES` | no | `1440` | `order_url` lifetime in minutes (24h) |
 | `API_BASE_URL` | no | `http://localhost:3000` | Public API base URL used when building links/QRs |
 | `ORDERING_BASE_URL` | no | `{API_BASE_URL}/api/v1/products` | Redirect target of `GET /api/v1/qr/visit` |
+| `CORS_ALLOWED_ORIGINS` | no | `*` | Comma-separated browser origins allowed by the API (`*` allows any origin) |
 | `MAX_PAYMENT_AMOUNT` | no | `1000.00` | Order total above which mock payment fails |
 | `AZURE_STORAGE_ACCOUNT` | no | — | Azure storage account for product image uploads (unset → image endpoints return 503) |
 | `AZURE_STORAGE_CONTAINER` | no | — | Private container that holds uploaded product images |
@@ -222,4 +223,4 @@ arrow_server/
 
 - Product images are uploaded to a **private Azure Blob Storage container** through `POST /products/{id}/image`; the read endpoints return short-lived read-only **SAS URLs** minted at request time (TTL `IMAGE_SAS_TTL_MINUTES`, default 15 min) instead of the stored blob path — SAS URLs are never persisted. Uploads require `AZURE_STORAGE_ACCOUNT`/`AZURE_STORAGE_CONTAINER` (and `AZURE_STORAGE_ACCOUNT_KEY` for SAS signing; without it uploads/deletes fall back to managed identity but read SAS URLs cannot be minted). When storage is not configured the image endpoints return 503 and legacy external `product_image_uri` values keep working unchanged.
 - Mock payments are deterministic and offline by design; no payment provider is integrated.
-- CORS currently allows any origin (`CorsLayer::allow_origin(Any)`) — tighten before production.
+- CORS is configured with `CORS_ALLOWED_ORIGINS` (comma-separated; default `*`) — set explicit origins before production.

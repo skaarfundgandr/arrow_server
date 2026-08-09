@@ -4,7 +4,7 @@ ARROW (**A**synchronous **R**ust **R**estaurant **O**rder **W**orkflow) Server: 
 
 ## Commands
 
-- Build/run: `cargo build`, `cargo run` (binds `0.0.0.0:3000`, all routes nested under `/api/v1/*`, CORS allow-any)
+- Build/run: `cargo build`, `cargo run` (binds `0.0.0.0:3000`, all routes nested under `/api/v1/*`, CORS configured by `CORS_ALLOWED_ORIGINS`)
 - Tests: `cargo test` — one integration binary at `tests/integration/` hitting a **real MySQL** instance via `DATABASE_URL`; the suite is fully parallel (no `--test-threads=1` needed). Test rows accumulate in the shared DB — periodically reset with `scripts/cleanup_test_db.sql` (TRUNCATE children-first; re-seed happens on next server start / test run)
 - Migrations: `diesel migration run`, `diesel migration generate NAME` — stored in the non-standard dir `src/data/migrations` (per `diesel.toml`); after schema changes run `diesel print-schema` (writes `src/data/models/schema.rs`)
 - CI (`.github/workflows/rust.yml`) only runs `cargo build` on master — no clippy/fmt/test gate

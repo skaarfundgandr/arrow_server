@@ -13,6 +13,7 @@ pub struct Config {
     pub order_link_ttl_minutes: u64,
     pub api_base_url: String,
     pub ordering_base_url: String,
+    pub cors_allowed_origins: Vec<String>,
     pub max_payment_amount: BigDecimal,
     pub azure_storage_account: Option<String>,
     pub azure_storage_container: Option<String>,
@@ -56,6 +57,7 @@ impl Config {
         let api_base_url = Config::var_or("API_BASE_URL", "http://localhost:3000");
         let ordering_base_url =
             Config::var_or("ORDERING_BASE_URL", &format!("{}/api/v1/products", api_base_url));
+        let cors_allowed_origins = Config::var_or_list("CORS_ALLOWED_ORIGINS", "*")?;
         let max_payment_amount = Config::var_or_parsed("MAX_PAYMENT_AMOUNT", "1000.00")?;
         let azure_storage_account = Config::var_or_none("AZURE_STORAGE_ACCOUNT");
         let azure_storage_container = Config::var_or_none("AZURE_STORAGE_CONTAINER");
@@ -74,6 +76,7 @@ impl Config {
             order_link_ttl_minutes,
             api_base_url,
             ordering_base_url,
+            cors_allowed_origins,
             max_payment_amount,
             azure_storage_account,
             azure_storage_container,
@@ -100,6 +103,24 @@ impl Config {
 
     fn var_or_none(name: &str) -> Option<String> {
         std::env::var(name).ok().filter(|value| !value.is_empty())
+    }
+
+    fn var_or_list(name: &str, default: &str) -> Result<Vec<String>, ConfigError> {
+        let values = Config::var_or(name, default)
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+
+        if values.is_empty() {
+            return Err(ConfigError::InvalidVar {
+                name: name.to_string(),
+                reason: "must contain at least one value".to_string(),
+            });
+        }
+
+        Ok(values)
     }
 
     fn var_or_parsed<T: std::str::FromStr>(name: &str, default: &str) -> Result<T, ConfigError>
