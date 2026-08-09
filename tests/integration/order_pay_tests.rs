@@ -3,11 +3,8 @@ use arrow_server_lib::api::controllers::order_controller::{
     cancel_order, create_order, get_user_orders_by_name, pay_order,
 };
 use arrow_server_lib::api::response::{CreateOrderResponse, PayOrderResponse};
-use arrow_server_lib::data::database::Database;
-use arrow_server_lib::data::models::product::NewProduct;
 use arrow_server_lib::data::models::user::NewUser;
 use arrow_server_lib::data::models::roles::{NewRole, RolePermissions};
-use arrow_server_lib::data::repos::implementors::product_repo::ProductRepo;
 use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
 use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
 use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
@@ -19,37 +16,11 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::{get, post};
-use bigdecimal::BigDecimal;
-use diesel::result;
-use diesel_async::RunQueryDsl;
 use http_body_util::BodyExt;
 use serde_json::json;
 use tower::ServiceExt;
 
-async fn setup() -> Result<(), result::Error> {
-    let db = Database::new().await;
-
-    let mut conn = db
-        .get_connection()
-        .await
-        .expect("Failed to get a database connection");
-
-    use arrow_server_lib::data::models::schema::order_products::dsl::order_products;
-    use arrow_server_lib::data::models::schema::orders::dsl::orders;
-    use arrow_server_lib::data::models::schema::products::dsl::products;
-    use arrow_server_lib::data::models::schema::user_roles::dsl::user_roles;
-    use arrow_server_lib::data::models::schema::roles::dsl::roles;
-    use arrow_server_lib::data::models::schema::users::dsl::users;
-
-    diesel::delete(order_products).execute(&mut conn).await?;
-    diesel::delete(orders).execute(&mut conn).await?;
-    diesel::delete(products).execute(&mut conn).await?;
-    diesel::delete(user_roles).execute(&mut conn).await?;
-    diesel::delete(roles).execute(&mut conn).await?;
-    diesel::delete(users).execute(&mut conn).await?;
-
-    Ok(())
-}
+use crate::common::{create_product_with_price, uniq};
 
 async fn create_user_with_role(
     username: &str,
@@ -116,22 +87,6 @@ async fn create_user_with_role(
     (user_id, token)
 }
 
-async fn create_test_product(name: &str, price: BigDecimal) -> i32 {
-    let repo = ProductRepo::new();
-    let product = NewProduct {
-        name,
-        product_image_uri: None,
-        description: Some("Test Description"),
-        price,
-    };
-    repo.add(product).await.expect("Failed to add product");
-    repo.get_by_name(name)
-        .await
-        .expect("Failed to get product")
-        .expect("Product not found")
-        .product_id
-}
-
 async fn create_guest_order(app: &Router, pid: i32, quantity: i32) -> i32 {
     let response = app
         .clone()
@@ -193,12 +148,15 @@ fn app() -> Router {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_pay_order_success_admin() {
-    setup().await.expect("Setup failed");
-    let (_, admin_token) =
-        create_user_with_role("adminuser", "pass", "ADMIN", RolePermissions::Admin).await;
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let (_, admin_token) = create_user_with_role(
+        &uniq("adminuser"),
+        "pass",
+        &uniq("ADMIN"),
+        RolePermissions::Admin,
+    )
+    .await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 2).await;
@@ -224,12 +182,15 @@ async fn test_pay_order_success_admin() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_pay_order_fails_over_max_amount() {
-    setup().await.expect("Setup failed");
-    let (_, admin_token) =
-        create_user_with_role("adminuser", "pass", "ADMIN", RolePermissions::Admin).await;
-    let pid = create_test_product("Expensive Product", BigDecimal::from(1500)).await;
+    let (_, admin_token) = create_user_with_role(
+        &uniq("adminuser"),
+        "pass",
+        &uniq("ADMIN"),
+        RolePermissions::Admin,
+    )
+    .await;
+    let pid = create_product_with_price(&uniq("pay_product"), "1500").await.product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -254,11 +215,14 @@ async fn test_pay_order_fails_over_max_amount() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_pay_order_not_found() {
-    setup().await.expect("Setup failed");
-    let (_, admin_token) =
-        create_user_with_role("adminuser", "pass", "ADMIN", RolePermissions::Admin).await;
+    let (_, admin_token) = create_user_with_role(
+        &uniq("adminuser"),
+        "pass",
+        &uniq("ADMIN"),
+        RolePermissions::Admin,
+    )
+    .await;
 
     let app = app();
 
@@ -266,7 +230,7 @@ async fn test_pay_order_not_found() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/orders/99999/pay")
+                .uri(format!("/orders/{}/pay", i32::MAX - 80))
                 .header("Authorization", format!("Bearer {}", admin_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -278,10 +242,8 @@ async fn test_pay_order_not_found() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_pay_order_via_valid_order_url() {
-    setup().await.expect("Setup failed");
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -308,12 +270,15 @@ async fn test_pay_order_via_valid_order_url() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_pay_order_forbidden_without_link() {
-    setup().await.expect("Setup failed");
-    let (_, reader_token) =
-        create_user_with_role("reader", "pass", "READER", RolePermissions::Read).await;
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let (_, reader_token) = create_user_with_role(
+        &uniq("reader"),
+        "pass",
+        &uniq("READER"),
+        RolePermissions::Read,
+    )
+    .await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -334,10 +299,8 @@ async fn test_pay_order_forbidden_without_link() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_pay_order_already_paid_conflict() {
-    setup().await.expect("Setup failed");
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -374,10 +337,8 @@ async fn test_pay_order_already_paid_conflict() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_create_order_zero_quantity_bad_request() {
-    setup().await.expect("Setup failed");
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let response = create_order_with_quantity(pid, 0).await;
 
@@ -385,10 +346,8 @@ async fn test_create_order_zero_quantity_bad_request() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_create_order_negative_quantity_bad_request() {
-    setup().await.expect("Setup failed");
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let response = create_order_with_quantity(pid, -1).await;
 
@@ -396,10 +355,10 @@ async fn test_create_order_negative_quantity_bad_request() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_pay_order_exact_max_amount_paid() {
-    setup().await.expect("Setup failed");
-    let pid = create_test_product("Max Amount Product", "1000.00".parse().unwrap()).await;
+    let pid = create_product_with_price(&uniq("pay_product"), "1000.00")
+        .await
+        .product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -426,10 +385,8 @@ async fn test_pay_order_exact_max_amount_paid() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_pay_order_tampered_signature_bad_request() {
-    setup().await.expect("Setup failed");
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -452,10 +409,8 @@ async fn test_pay_order_tampered_signature_bad_request() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_pay_order_expired_url_gone() {
-    setup().await.expect("Setup failed");
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -479,12 +434,15 @@ async fn test_pay_order_expired_url_gone() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_cancel_guest_order_by_admin() {
-    setup().await.expect("Setup failed");
-    let (_, admin_token) =
-        create_user_with_role("adminuser", "pass", "ADMIN", RolePermissions::Admin).await;
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let (_, admin_token) = create_user_with_role(
+        &uniq("adminuser"),
+        "pass",
+        &uniq("ADMIN"),
+        RolePermissions::Admin,
+    )
+    .await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -505,16 +463,18 @@ async fn test_cancel_guest_order_by_admin() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_cancel_own_order_read_only_owner_success() {
-    setup().await.expect("Setup failed");
-    let (_, owner_token) =
-        create_user_with_role("readowner", "pass", "READOWNER", RolePermissions::Read).await;
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let (_, owner_token) = create_user_with_role(
+        &uniq("readowner"),
+        "pass",
+        &uniq("READOWNER"),
+        RolePermissions::Read,
+    )
+    .await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let app = app();
 
-    // Create order as the read-only owner
     let response = app
         .clone()
         .oneshot(
@@ -543,7 +503,6 @@ async fn test_cancel_own_order_read_only_owner_success() {
     let created: CreateOrderResponse = serde_json::from_slice(&body).unwrap();
     let order_id = created.order.order_id;
 
-    // Owner with only READ permission cancels own order
     let response = app
         .oneshot(
             Request::builder()
@@ -560,16 +519,19 @@ async fn test_cancel_own_order_read_only_owner_success() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_get_own_orders_read_only_success() {
-    setup().await.expect("Setup failed");
-    let (_, owner_token) =
-        create_user_with_role("readviewer", "pass", "READVIEWER", RolePermissions::Read).await;
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let username = uniq("readviewer");
+    let (_, owner_token) = create_user_with_role(
+        &username,
+        "pass",
+        &uniq("READVIEWER"),
+        RolePermissions::Read,
+    )
+    .await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
     let app = app();
 
-    // Create order as the read-only owner
     let response = app
         .clone()
         .oneshot(
@@ -594,12 +556,14 @@ async fn test_get_own_orders_read_only_success() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let created: CreateOrderResponse = serde_json::from_slice(&body).unwrap();
+    let order_id = created.order.order_id;
 
-    // Self-service fetch of own orders with only READ permission
     let response = app
         .oneshot(
             Request::builder()
-                .uri("/orders/user/readviewer")
+                .uri(format!("/orders/user/{}", username))
                 .header("Authorization", format!("Bearer {}", owner_token))
                 .body(Body::empty())
                 .unwrap(),
@@ -612,18 +576,16 @@ async fn test_get_own_orders_read_only_success() {
     let orders: Vec<arrow_server_lib::api::response::OrderResponse> =
         serde_json::from_slice(&body).unwrap();
     assert_eq!(orders.len(), 1);
+    assert_eq!(orders[0].order_id, order_id);
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_create_order_token_of_deleted_user_unauthorized() {
-    setup().await.expect("Setup failed");
-    let pid = create_test_product("Product 1", BigDecimal::from(10)).await;
+    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
 
-    // Valid-format JWT whose subject does not exist in the users table
     let now = chrono::Utc::now().timestamp() as usize;
     let claims = AccessClaims {
-        sub: 999_999,
+        sub: i32::MAX as usize - 81,
         iat: now,
         exp: now + 3600,
         roles: None,

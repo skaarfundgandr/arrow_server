@@ -89,6 +89,22 @@ pub async fn create_product(name: &str) -> Product {
         .expect("Product not found")
 }
 
+pub async fn create_product_with_price(name: &str, price: &str) -> Product {
+    let repo = ProductRepo::new();
+    repo.add(NewProduct {
+        name,
+        product_image_uri: None,
+        description: Some("Test product"),
+        price: BigDecimal::from_str(price).unwrap(),
+    })
+    .await
+    .expect("Failed to add product");
+    repo.get_by_name(name)
+        .await
+        .expect("Failed to get product")
+        .expect("Product not found")
+}
+
 pub async fn create_category(name: &str) -> Category {
     let repo = CategoryRepo::new();
     repo.add(NewCategory {

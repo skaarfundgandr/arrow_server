@@ -1,128 +1,21 @@
-use arrow_server_lib::data::database::*;
-use arrow_server_lib::data::models::product::NewProduct;
-use arrow_server_lib::data::models::user::NewUser;
-use arrow_server_lib::data::models::roles::{NewRole, RolePermissions};
-use arrow_server_lib::data::repos::implementors::product_repo::ProductRepo;
-use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
-use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
-use arrow_server_lib::data::repos::traits::repository::Repository;
-use arrow_server_lib::security::auth::AuthService;
+use arrow_server_lib::data::models::roles::RolePermissions;
 use arrow_server_lib::services::errors::OrderServiceError;
 use arrow_server_lib::services::order_service::{OrderService, OrderStatus};
-use bigdecimal::BigDecimal;
-use diesel::result;
-use diesel_async::RunQueryDsl;
 use std::str::FromStr;
 
-async fn setup() -> Result<(), result::Error> {
-    let db = Database::new().await;
-
-    let mut conn = db
-        .get_connection()
-        .await
-        .expect("Failed to get a database connection");
-
-    use arrow_server_lib::data::models::schema::order_products::dsl::order_products;
-    use arrow_server_lib::data::models::schema::orders::dsl::orders;
-    use arrow_server_lib::data::models::schema::products::dsl::products;
-    use arrow_server_lib::data::models::schema::user_roles::dsl::user_roles;
-    use arrow_server_lib::data::models::schema::users::dsl::users;
-    use arrow_server_lib::data::models::schema::roles::dsl::roles;
-
-    diesel::delete(order_products).execute(&mut conn).await?;
-    diesel::delete(orders).execute(&mut conn).await?;
-    diesel::delete(products).execute(&mut conn).await?;
-    diesel::delete(user_roles).execute(&mut conn).await?;
-    diesel::delete(roles).execute(&mut conn).await?;
-    diesel::delete(users).execute(&mut conn).await?;
-
-    Ok(())
-}
-
-async fn create_test_user(username: &str) -> i32 {
-    let auth = AuthService::new();
-    let repo = UserRepo::new();
-
-    let hashed = auth
-        .hash_password("testpass")
-        .await
-        .expect("Hashing failed");
-
-    let test_user = NewUser {
-        username,
-        password_hash: &hashed,
-    };
-
-    repo.add(test_user).await.expect("Failed to add user");
-
-    repo.get_by_username(username)
-        .await
-        .expect("Failed to get user")
-        .expect("User not found")
-        .user_id
-}
-
-async fn create_role_with_permission(name: &str, permission: RolePermissions) -> i32 {
-    let repo = RoleRepo::new();
-
-    let new_role = NewRole {
-        name,
-        description: None,
-    };
-
-    repo.add(new_role).await.expect("Failed to add role");
-
-    let role = repo
-        .get_by_name(name)
-        .await
-        .expect("Failed to get role")
-        .expect("Role not found");
-
-    repo.set_permissions(role.role_id, permission)
-        .await
-        .expect("Failed to set permissions");
-
-    role.role_id
-}
-
-async fn create_test_product() -> i32 {
-    let repo = ProductRepo::new();
-
-    let new_product = NewProduct {
-        name: "ServiceTestProduct",
-        product_image_uri: None,
-        description: Some("Test product for order service"),
-        price: BigDecimal::from_str("15.00").unwrap(),
-    };
-
-    repo.add(new_product).await.expect("Failed to add product");
-
-    repo.get_by_name("ServiceTestProduct")
-        .await
-        .expect("Failed to get product")
-        .expect("Product not found")
-        .product_id
-}
+use crate::common::{create_product, create_role_with_permission, create_user, uniq};
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_create_order_with_write_permission() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("write_user").await;
-    let _role_id = create_role_with_permission("writer", RolePermissions::Write).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("write_user")).await.user_id;
+    let _role_id = create_role_with_permission(&uniq("ow_writer"), RolePermissions::Write)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    let items = vec![(product_id, 2)];
-
-    let result = service
-            .create_order(
-                Some(user_id),
-                items,
-            )
-        .await;
+    let result = service.create_order(Some(user_id), vec![(product_id, 2)]).await;
 
     assert!(
         result.is_ok(),
@@ -131,24 +24,16 @@ async fn test_create_order_with_write_permission() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_create_order_with_admin_permission() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("admin_user").await;
-    let _role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("admin_user")).await.user_id;
+    let _role_id = create_role_with_permission(&uniq("ow_admin"), RolePermissions::Admin)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    let items = vec![(product_id, 1)];
-
-    let result = service
-            .create_order(
-                Some(user_id),
-                items,
-            )
-        .await;
+    let result = service.create_order(Some(user_id), vec![(product_id, 1)]).await;
 
     assert!(
         result.is_ok(),
@@ -157,24 +42,16 @@ async fn test_create_order_with_admin_permission() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_create_order_without_permission() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("read_only_user").await;
-    let _role_id = create_role_with_permission("reader", RolePermissions::Read).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("read_only_user")).await.user_id;
+    let _role_id = create_role_with_permission(&uniq("ow_reader"), RolePermissions::Read)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    let items = vec![(product_id, 1)];
-
-    let result = service
-        .create_order(
-            Some(user_id),
-            items,
-        )
-        .await;
+    let result = service.create_order(Some(user_id), vec![(product_id, 1)]).await;
 
     assert!(
         result.is_ok(),
@@ -183,178 +60,142 @@ async fn test_create_order_without_permission() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_get_user_own_orders() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("order_viewer").await;
-    let _write_role_id =
-        create_role_with_permission("writer", RolePermissions::Write).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("order_viewer")).await.user_id;
+    let _write_role_id = create_role_with_permission(&uniq("ow_writer"), RolePermissions::Write)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    // Create an order
-    let items = vec![(product_id, 1)];
-    service
-        .create_order(
-            Some(user_id),
-            items,
-        )
+    let order_id = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
         .await
         .expect("Failed to create order");
 
-    // Create read role for viewing
-    let read_role_id = create_role_with_permission("reader", RolePermissions::Read).await;
+    let read_role_id = create_role_with_permission(&uniq("ow_reader"), RolePermissions::Read)
+        .await
+        .role_id;
 
-    // Get own orders
     let orders = service
         .get_user_orders(user_id, read_role_id)
         .await
-        .expect("Failed to get orders");
+        .expect("Failed to get orders")
+        .expect("Should have orders");
 
-    assert!(orders.is_some(), "Should have orders");
-    assert_eq!(orders.unwrap().len(), 1);
+    assert_eq!(orders.len(), 1);
+    assert_eq!(orders[0].0.order_id, order_id);
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_get_other_user_orders_with_read_permission() {
-    setup().await.expect("Setup failed");
-
-    let user1_id = create_test_user("user1").await;
-    let _write_role_id =
-        create_role_with_permission("writer1", RolePermissions::Write).await;
-    let read_role_id =
-        create_role_with_permission("reader2", RolePermissions::Read).await;
-    let product_id = create_test_product().await;
+    let user1_id = create_user(&uniq("user1")).await.user_id;
+    let _write_role1_id = create_role_with_permission(&uniq("ow_writer1"), RolePermissions::Write)
+        .await
+        .role_id;
+    let read_role_id = create_role_with_permission(&uniq("ow_reader2"), RolePermissions::Read)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    // Create order for user1
-    let items = vec![(product_id, 1)];
-    service
-        .create_order(
-            Some(user1_id),
-            items,
-        )
+    let order_id = service
+        .create_order(Some(user1_id), vec![(product_id, 1)])
         .await
         .expect("Failed to create order");
 
-    // User2 with READ permission can view user1's orders (new behavior)
-    let result = service.get_user_orders(user1_id, read_role_id).await;
+    let orders = service
+        .get_user_orders(user1_id, read_role_id)
+        .await
+        .expect("User with READ permission should be able to view any user's orders")
+        .expect("Should have orders");
 
-    assert!(
-        result.is_ok(),
-        "User with READ permission should be able to view any user's orders"
-    );
-    assert!(result.unwrap().is_some());
+    assert_eq!(orders.len(), 1);
+    assert_eq!(orders[0].0.order_id, order_id);
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_admin_get_all_orders() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("admin_viewer").await;
-    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("admin_viewer")).await.user_id;
+    let admin_role_id = create_role_with_permission(&uniq("ow_admin"), RolePermissions::Admin)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    // Create multiple orders
-    service
-            .create_order(
-                Some(user_id),
-                vec![(product_id, 1)],
-            )
+    let order1 = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
         .await
         .expect("Failed to create order 1");
 
-    service
-            .create_order(
-                Some(user_id),
-                vec![(product_id, 2)],
-            )
+    let order2 = service
+        .create_order(Some(user_id), vec![(product_id, 2)])
         .await
         .expect("Failed to create order 2");
 
     let orders = service
         .get_all_orders(admin_role_id)
         .await
-        .expect("Failed to get all orders");
-
-    assert!(orders.is_some());
-    assert_eq!(orders.unwrap().len(), 2);
-}
-
-#[tokio::test]
-#[serial_test::serial]
-async fn test_read_permission_get_all_orders() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("reader").await;
-    let _write_role_id =
-        create_role_with_permission("writer", RolePermissions::Write).await;
-    let read_role_id = create_role_with_permission("reader", RolePermissions::Read).await;
-    let product_id = create_test_product().await;
-
-    let service = OrderService::new();
-
-    // Create an order first
-    service
-        .create_order(
-            Some(user_id),
-            vec![(product_id, 1)],
-        )
-        .await
-        .expect("Failed to create order");
-
-    // READ permission can now get all orders
-    let result = service.get_all_orders(read_role_id).await;
-
-    assert!(
-        result.is_ok(),
-        "READ permission should be able to get all orders"
-    );
-}
-
-#[tokio::test]
-#[serial_test::serial]
-async fn test_cancel_own_pending_order() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("canceller").await;
-    let write_role_id =
-        create_role_with_permission("writer", RolePermissions::Write).await;
-    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
-    let product_id = create_test_product().await;
-
-    let service = OrderService::new();
-
-    // Create order
-    service
-            .create_order(
-                Some(user_id),
-                vec![(product_id, 1)],
-            )
-        .await
-        .expect("Failed to create order");
-
-    // Get order ID using admin role
-    let orders = service
-        .get_user_orders(user_id, admin_role_id)
-        .await
-        .expect("Failed to get orders")
+        .expect("Failed to get all orders")
         .expect("No orders");
-    let order_id = orders[0].0.order_id;
 
-    // Cancel order using write role (owner cancelling their own pending order)
+    let order_ids: Vec<i32> = orders.iter().map(|(o, _)| o.order_id).collect();
+    assert!(order_ids.contains(&order1));
+    assert!(order_ids.contains(&order2));
+}
+
+#[tokio::test]
+async fn test_read_permission_get_all_orders() {
+    let user_id = create_user(&uniq("reader")).await.user_id;
+    let _write_role_id = create_role_with_permission(&uniq("ow_writer"), RolePermissions::Write)
+        .await
+        .role_id;
+    let read_role_id = create_role_with_permission(&uniq("ow_reader"), RolePermissions::Read)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
+
+    let service = OrderService::new();
+
+    let order_id = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
+        .await
+        .expect("Failed to create order");
+
+    let orders = service
+        .get_all_orders(read_role_id)
+        .await
+        .expect("READ permission should be able to get all orders")
+        .expect("No orders");
+
+    assert!(orders.iter().any(|(o, _)| o.order_id == order_id));
+}
+
+#[tokio::test]
+async fn test_cancel_own_pending_order() {
+    let user_id = create_user(&uniq("canceller")).await.user_id;
+    let write_role_id = create_role_with_permission(&uniq("ow_writer"), RolePermissions::Write)
+        .await
+        .role_id;
+    let admin_role_id = create_role_with_permission(&uniq("ow_admin"), RolePermissions::Admin)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
+
+    let service = OrderService::new();
+
+    let order_id = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
+        .await
+        .expect("Failed to create order");
+
     let result = service.cancel_order(order_id, write_role_id).await;
 
     assert!(result.is_ok(), "Should be able to cancel own pending order");
 
-    // Verify status changed
     let (cancelled_order, _) = service
         .get_order_by_id(order_id, admin_role_id)
         .await
@@ -365,40 +206,23 @@ async fn test_cancel_own_pending_order() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_cancel_other_user_order_denied() {
-    setup().await.expect("Setup failed");
-
-    let user1_id = create_test_user("owner").await;
-    let _write_role1_id =
-        create_role_with_permission("writer1", RolePermissions::Write).await;
-    let write_role2_id =
-        create_role_with_permission("writer2", RolePermissions::Write).await;
-    let admin_role_id =
-        create_role_with_permission("admin1", RolePermissions::Admin).await;
-    let product_id = create_test_product().await;
+    let user1_id = create_user(&uniq("owner")).await.user_id;
+    let _write_role1_id = create_role_with_permission(&uniq("ow_writer1"), RolePermissions::Write)
+        .await
+        .role_id;
+    let write_role2_id = create_role_with_permission(&uniq("ow_writer2"), RolePermissions::Write)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    // Create order for user1
-    service
-        .create_order(
-            Some(user1_id),
-            vec![(product_id, 1)],
-        )
+    let order_id = service
+        .create_order(Some(user1_id), vec![(product_id, 1)])
         .await
         .expect("Failed to create order");
 
-    // Get order ID using admin role
-    let orders = service
-        .get_user_orders(user1_id, admin_role_id)
-        .await
-        .expect("Failed to get orders")
-        .expect("No orders");
-    let order_id = orders[0].0.order_id;
-
-    // User2 tries to cancel user1's order (now only checks role permission)
-    // With WRITE permission, this should now succeed
     let result = service.cancel_order(order_id, write_role2_id).await;
 
     assert!(
@@ -408,35 +232,23 @@ async fn test_cancel_other_user_order_denied() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_write_permission_update_order_status() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("status_updater").await;
-    let write_role_id =
-        create_role_with_permission("writer", RolePermissions::Write).await;
-    let read_role_id = create_role_with_permission("reader", RolePermissions::Read).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("status_updater")).await.user_id;
+    let write_role_id = create_role_with_permission(&uniq("ow_writer"), RolePermissions::Write)
+        .await
+        .role_id;
+    let read_role_id = create_role_with_permission(&uniq("ow_reader"), RolePermissions::Read)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    // Create order
-    service
-            .create_order(
-                Some(user_id),
-                vec![(product_id, 1)],
-            )
+    let order_id = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
         .await
         .expect("Failed to create order");
 
-    let orders = service
-        .get_all_orders(read_role_id)
-        .await
-        .expect("Failed to get orders")
-        .expect("No orders");
-    let order_id = orders[0].0.order_id;
-
-    // Update status to Accepted (requires WRITE permission)
     service
         .update_order_status(order_id, OrderStatus::Accepted, write_role_id)
         .await
@@ -450,7 +262,6 @@ async fn test_write_permission_update_order_status() {
 
     assert_eq!(updated_order.status, "Accepted".to_string());
 
-    // Update status to Completed
     service
         .update_order_status(order_id, OrderStatus::Completed, write_role_id)
         .await
@@ -466,41 +277,24 @@ async fn test_write_permission_update_order_status() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_non_admin_update_status_denied() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("non_admin_updater").await;
-    let write_role_id =
-        create_role_with_permission("writer", RolePermissions::Write).await;
-    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("non_admin_updater")).await.user_id;
+    let write_role_id = create_role_with_permission(&uniq("ow_writer"), RolePermissions::Write)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    // Create order
-    service
-            .create_order(
-                Some(user_id),
-                vec![(product_id, 1)],
-            )
+    let order_id = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
         .await
         .expect("Failed to create order");
 
-    // Get order ID using admin role
-    let orders = service
-        .get_user_orders(user_id, admin_role_id)
-        .await
-        .expect("Failed to get orders")
-        .expect("No orders");
-    let order_id = orders[0].0.order_id;
-
-    // Try to update status with write role (now allowed per new service logic)
     let result = service
         .update_order_status(order_id, OrderStatus::Accepted, write_role_id)
         .await;
 
-    // Note: The new service allows WRITE permission to update order status
     assert!(
         result.is_ok(),
         "Write permission should be able to update order status"
@@ -508,99 +302,74 @@ async fn test_non_admin_update_status_denied() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_get_orders_by_status() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("status_viewer").await;
-    let write_role_id =
-        create_role_with_permission("writer", RolePermissions::Write).await;
-    let read_role_id = create_role_with_permission("reader", RolePermissions::Read).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("status_viewer")).await.user_id;
+    let write_role_id = create_role_with_permission(&uniq("ow_writer"), RolePermissions::Write)
+        .await
+        .role_id;
+    let read_role_id = create_role_with_permission(&uniq("ow_reader"), RolePermissions::Read)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    // Create orders
-    service
-            .create_order(
-                Some(user_id),
-                vec![(product_id, 1)],
-            )
+    let order1 = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
         .await
         .expect("Failed to create order 1");
 
-    service
-            .create_order(
-                Some(user_id),
-                vec![(product_id, 2)],
-            )
+    let order2 = service
+        .create_order(Some(user_id), vec![(product_id, 2)])
         .await
         .expect("Failed to create order 2");
 
-    // Get pending orders (requires READ or ADMIN)
     let pending_orders = service
         .get_orders_by_status(OrderStatus::Pending, read_role_id)
         .await
-        .expect("Failed to get pending orders");
-
-    assert!(pending_orders.is_some());
-    assert_eq!(pending_orders.unwrap().len(), 2);
-
-    // Update one to completed (requires WRITE permission)
-    let orders = service
-        .get_all_orders(read_role_id)
-        .await
-        .expect("Failed to get orders")
+        .expect("Failed to get pending orders")
         .expect("No orders");
 
+    let pending_ids: Vec<i32> = pending_orders.iter().map(|(o, _)| o.order_id).collect();
+    assert!(pending_ids.contains(&order1));
+    assert!(pending_ids.contains(&order2));
+
     service
-        .update_order_status(orders[0].0.order_id, OrderStatus::Completed, write_role_id)
+        .update_order_status(order1, OrderStatus::Completed, write_role_id)
         .await
         .expect("Failed to update status");
 
     let completed_orders = service
         .get_orders_by_status(OrderStatus::Completed, read_role_id)
         .await
-        .expect("Failed to get completed orders");
+        .expect("Failed to get completed orders")
+        .expect("No orders");
 
-    assert!(completed_orders.is_some());
-    assert_eq!(completed_orders.unwrap().len(), 1);
+    let completed_ids: Vec<i32> = completed_orders.iter().map(|(o, _)| o.order_id).collect();
+    assert!(completed_ids.contains(&order1));
+    assert!(!completed_ids.contains(&order2));
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_delete_order_admin_only() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("admin_deleter").await;
-    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("admin_deleter")).await.user_id;
+    let admin_role_id = create_role_with_permission(&uniq("ow_admin"), RolePermissions::Admin)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    // Create order
-    service
-            .create_order(
-                Some(user_id),
-                vec![(product_id, 1)],
-            )
+    let order_id = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
         .await
         .expect("Failed to create order");
 
-    let orders = service
-        .get_all_orders(admin_role_id)
-        .await
-        .expect("Failed to get orders")
-        .expect("No orders");
-    let order_id = orders[0].0.order_id;
-
-    // Delete order
     service
         .delete_order(order_id, admin_role_id)
         .await
         .expect("Failed to delete order");
 
-    // Verify deleted
     let deleted_order = service
         .get_order_by_id(order_id, admin_role_id)
         .await
@@ -610,36 +379,20 @@ async fn test_delete_order_admin_only() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_delete_order_non_admin_denied() {
-    setup().await.expect("Setup failed");
-
-    let user_id = create_test_user("non_admin_deleter").await;
-    let write_role_id =
-        create_role_with_permission("writer", RolePermissions::Write).await;
-    let admin_role_id = create_role_with_permission("admin", RolePermissions::Admin).await;
-    let product_id = create_test_product().await;
+    let user_id = create_user(&uniq("non_admin_deleter")).await.user_id;
+    let write_role_id = create_role_with_permission(&uniq("ow_writer"), RolePermissions::Write)
+        .await
+        .role_id;
+    let product_id = create_product(&uniq("ow_product")).await.product_id;
 
     let service = OrderService::new();
 
-    // Create order
-    service
-            .create_order(
-                Some(user_id),
-                vec![(product_id, 1)],
-            )
+    let order_id = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
         .await
         .expect("Failed to create order");
 
-    // Get order ID using admin role
-    let orders = service
-        .get_user_orders(user_id, admin_role_id)
-        .await
-        .expect("Failed to get orders")
-        .expect("No orders");
-    let order_id = orders[0].0.order_id;
-
-    // Try to delete with write role (requires DELETE or ADMIN permission)
     let result = service.delete_order(order_id, write_role_id).await;
 
     assert_eq!(
@@ -650,7 +403,6 @@ async fn test_delete_order_non_admin_denied() {
 }
 
 #[tokio::test]
-#[serial_test::serial]
 async fn test_order_status_enum() {
     assert_eq!(OrderStatus::Pending.as_str(), "Pending");
     assert_eq!(OrderStatus::Accepted.as_str(), "Accepted");
