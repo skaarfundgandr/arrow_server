@@ -29,6 +29,7 @@ bigdecimal = { version = "0.4", features = ["serde"] }
 diesel = { version = "2.3.3", features = ["chrono", "mysql", "numeric"] }
 diesel-async = { version = "0.7.4", features = ["mysql", "deadpool"] }
 dotenvy = "0.15.7"
+# azure_storage_blob 1.0.0 requires UnboundedReceiver::recv, which only futures 0.3.33 provides
 futures = "=0.3.33"
 once_cell = "1.21.3"
 serial_test = "3.2.0"

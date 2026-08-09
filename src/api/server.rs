@@ -28,6 +28,7 @@ pub enum ServerError {
     Bind(std::io::Error),
     Serve(std::io::Error),
     Config(crate::api::config::ConfigError),
+    Database(crate::data::database::DatabaseError),
     RateLimit(String),
 }
 
@@ -37,6 +38,7 @@ impl std::fmt::Display for ServerError {
             ServerError::Bind(e) => write!(f, "Failed to bind to address: {}", e),
             ServerError::Serve(e) => write!(f, "Server failed: {}", e),
             ServerError::Config(e) => write!(f, "Configuration error: {}", e),
+            ServerError::Database(e) => write!(f, "Database unavailable at startup: {}", e),
             ServerError::RateLimit(msg) => write!(f, "Rate limit configuration error: {}", msg),
         }
     }
@@ -46,6 +48,13 @@ impl std::error::Error for ServerError {}
 
 pub async fn start() -> Result<(), ServerError> {
     Config::get().map_err(ServerError::Config)?;
+
+    let database = crate::data::database::Database::new().await;
+    database
+        .get_connection()
+        .await
+        .map_err(ServerError::Database)
+        .map(drop)?;
 
     let auth_config = GovernorConfigBuilder::default()
         .per_second(AUTH_LIMIT_PER_SECOND)

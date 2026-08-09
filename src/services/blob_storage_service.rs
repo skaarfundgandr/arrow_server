@@ -66,6 +66,9 @@ pub trait BlobStore: Send + Sync {
         blob_name: &str,
         ttl_minutes: u64,
     ) -> Result<String, BlobStoreError>;
+
+    /// Whether the store has the minimum configuration to perform operations.
+    fn is_configured(&self) -> bool;
 }
 
 pub struct AzureBlobStore {
@@ -279,5 +282,9 @@ impl BlobStore for AzureBlobStore {
         Ok(format!(
             "https://{account}.blob.core.windows.net/{container}/{blob_name}?{query}"
         ))
+    }
+
+    fn is_configured(&self) -> bool {
+        matches!((&self.account, &self.container), (Some(_), Some(_)))
     }
 }

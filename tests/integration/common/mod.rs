@@ -317,6 +317,10 @@ impl BlobStore for StubBlobStore {
             "https://stub.blob.core.windows.net/{blob_name}?sig=stub&ttl={ttl_minutes}"
         ))
     }
+
+    fn is_configured(&self) -> bool {
+        true
+    }
 }
 
 pub fn png_bytes() -> Vec<u8> {

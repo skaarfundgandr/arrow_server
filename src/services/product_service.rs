@@ -386,15 +386,6 @@ impl ProductService {
             .await
             .map_err(map_blob_store_error)?;
 
-        if let Some(previous) = product
-            .product_image_uri
-            .as_deref()
-            .filter(|uri| is_blob_path(uri))
-            && let Err(error) = self.blob_store.delete(previous).await
-        {
-            tracing::warn!("Failed to delete replaced product image blob {}: {}", previous, error);
-        }
-
         let update = UpdateProduct {
             name: None,
             product_image_uri: Some(Some(&blob_name)),
@@ -411,6 +402,15 @@ impl ProductService {
                 );
             }
             return Err(ProductServiceError::ImageUploadFailed);
+        }
+
+        if let Some(previous) = product
+            .product_image_uri
+            .as_deref()
+            .filter(|uri| is_blob_path(uri))
+            && let Err(error) = self.blob_store.delete(previous).await
+        {
+            tracing::warn!("Failed to delete replaced product image blob {}: {}", previous, error);
         }
 
         Ok(blob_name)
@@ -434,16 +434,10 @@ impl ProductService {
             .map_err(|_| ProductServiceError::DatabaseError)?
             .ok_or(ProductServiceError::ProductNotFound)?;
 
-        if let Some(blob_name) = product.product_image_uri.filter(|uri| is_blob_path(uri)) {
-            match self.blob_store.delete(&blob_name).await {
-                Ok(_) => {}
-                Err(BlobStoreError::NotConfigured) => {
-                    return Err(ProductServiceError::StorageNotConfigured);
-                }
-                Err(error) => {
-                    tracing::warn!("Failed to delete product image blob {}: {}", blob_name, error);
-                }
-            }
+        let blob_name = product.product_image_uri.filter(|uri| is_blob_path(uri));
+
+        if blob_name.is_some() && !self.blob_store.is_configured() {
+            return Err(ProductServiceError::StorageNotConfigured);
         }
 
         let update = UpdateProduct {
@@ -455,7 +449,15 @@ impl ProductService {
 
         repo.update(product_id, update)
             .await
-            .map_err(|_| ProductServiceError::ImageDeletionFailed)
+            .map_err(|_| ProductServiceError::ImageDeletionFailed)?;
+
+        if let Some(blob_name) = blob_name
+            && let Err(error) = self.blob_store.delete(&blob_name).await
+        {
+            tracing::warn!("Failed to delete product image blob {}: {}", blob_name, error);
+        }
+
+        Ok(())
     }
 
     async fn has_permission(
