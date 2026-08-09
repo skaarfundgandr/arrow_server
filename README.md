@@ -223,4 +223,4 @@ arrow_server/
 
 - Product images are uploaded to a **private Azure Blob Storage container** through `POST /products/{id}/image`; the read endpoints return short-lived read-only **SAS URLs** minted at request time (TTL `IMAGE_SAS_TTL_MINUTES`, default 15 min) instead of the stored blob path — SAS URLs are never persisted. Uploads require `AZURE_STORAGE_ACCOUNT`/`AZURE_STORAGE_CONTAINER` (and `AZURE_STORAGE_ACCOUNT_KEY` for SAS signing; without it uploads/deletes fall back to managed identity but read SAS URLs cannot be minted). When storage is not configured the image endpoints return 503 and legacy external `product_image_uri` values keep working unchanged.
 - Mock payments are deterministic and offline by design; no payment provider is integrated.
-- CORS is configured with `CORS_ALLOWED_ORIGINS` (comma-separated; default `*`) — set explicit origins before production.
+- CORS is configured with `CORS_ALLOWED_ORIGINS` (comma-separated; default `*`). Browser preflight allows `GET`, `POST`, `DELETE`, and `OPTIONS` with `Authorization`, `Content-Type`, and `Accept`, caches for 600 seconds, and does not enable credentials — set explicit origins before production.

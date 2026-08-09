@@ -50,7 +50,7 @@ impl JwtService {
         )
         .map_err(|_| AuthError::TokenCreationError);
 
-        tracing::info!("Token generated: {:?}", token);
+        tracing::info!(user_id = user.user_id, "Token generated");
 
         token
     }

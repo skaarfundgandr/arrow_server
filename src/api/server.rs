@@ -5,7 +5,7 @@ use crate::api::routes::{
 };
 use axum::body::Body;
 use axum::extract::Request;
-use axum::http::HeaderValue;
+use axum::http::{HeaderValue, Method, header};
 use axum::middleware::Next;
 use axum::response::Response;
 use axum::routing::get;
@@ -123,12 +123,17 @@ pub async fn start() -> Result<(), ServerError> {
 }
 
 fn build_cors_layer(config: &Config) -> Result<CorsLayer, ServerError> {
+    let cors = CorsLayer::new()
+        .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
+        .max_age(Duration::from_secs(600));
+
     if config
         .cors_allowed_origins
         .iter()
         .any(|origin| origin == "*")
     {
-        return Ok(CorsLayer::new().allow_origin(Any));
+        return Ok(cors.allow_origin(Any));
     }
 
     let origins = config
@@ -144,15 +149,15 @@ fn build_cors_layer(config: &Config) -> Result<CorsLayer, ServerError> {
         })
         .collect::<Result<Vec<_>, _>>()?;
 
-    Ok(CorsLayer::new().allow_origin(origins))
+    Ok(cors.allow_origin(origins))
 }
 
-#[tracing::instrument(level = tracing::Level::TRACE, name = "axum", skip_all, fields(method=request.method().to_string(), uri=request.uri().to_string()))]
+#[tracing::instrument(level = tracing::Level::TRACE, name = "axum", skip_all, fields(method=request.method().to_string(), uri=request.uri().path().to_string()))]
 pub async fn logging_middleware(request: Request<Body>, next: Next) -> Response {
     tracing::trace!(
         "received a {} request to {}",
         request.method(),
-        request.uri()
+        request.uri().path()
     );
     next.run(request).await
 }
