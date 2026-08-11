@@ -59,6 +59,10 @@ pub fn build_order_url(order_id: i32) -> Result<String, OrderUrlError> {
 /// Returns `Err(OrderUrlError::InvalidSignature)` for a tampered signature and
 /// `Err(OrderUrlError::Expired)` when `exp` is in the past.
 pub fn verify_order_url(order_id: i32, exp: u64, sig: &str) -> Result<(), OrderUrlError> {
+    let now = chrono::Utc::now().timestamp() as u64;
+    if now >= exp {
+        return Err(OrderUrlError::Expired);
+    }
     let config = Config::get().map_err(|_| OrderUrlError::Config)?;
     verify_order_url_with_key(&config.qr_signing_secret, order_id, exp, sig)
 }
