@@ -27,13 +27,38 @@ Built with Rust, [Axum](https://crates.io/crates/axum), [diesel-async](https://c
 
 ## Prerequisites
 
-- [Rust](https://rustup.rs/) (stable toolchain)
-- [MySQL](https://dev.mysql.com/downloads/) 8.x, running locally
-- [diesel_cli](https://diesel.rs/guides/getting-started) with the `mysql` feature:
+- [Rust](https://rustup.rs/) 1.97.1 via rustup; the root `rust-toolchain.toml` selects it automatically.
+- [MySQL](https://dev.mysql.com/downloads/) 8.4 LTS (current patch: 8.4.10), running locally.
+- [diesel_cli](https://diesel.rs/guides/getting-started) 2.3.12 with the MySQL feature:
 
 ```bash
-cargo install diesel_cli --no-default-features --features mysql
+cargo install diesel_cli --version 2.3.12 --no-default-features --features mysql
 ```
+
+For a faster prebuilt installation, `cargo binstall diesel_cli` is an alternative.
+
+### Native MySQL client
+
+`mysqlclient-sys` needs the native MySQL/MariaDB client development headers and library at build time, plus the shared client library at runtime.
+
+- **Windows:** A MySQL Server 8.x installation provides the client files. Set `MYSQLCLIENT_LIB_DIR` to the directory containing `libmysql.lib` and `libmysql.dll`, then set `MYSQLCLIENT_LIBNAME=libmysql` and `MYSQLCLIENT_VERSION=8.0`:
+
+  ```powershell
+  $env:MYSQLCLIENT_LIB_DIR = 'C:\Program Files\MySQL\MySQL Server 8.0\lib'
+  $env:MYSQLCLIENT_LIBNAME = 'libmysql'
+  $env:MYSQLCLIENT_VERSION = '8.0'
+  ```
+
+  Alternatively, provide the client through [vcpkg](https://vcpkg.io/).
+- **Linux:** Install `pkg-config` and the client development package so `pkg-config` can find it:
+
+  ```bash
+  sudo apt-get install pkg-config default-libmysqlclient-dev
+  ```
+
+  `libmysqlclient-dev` or `libmariadb-dev` can be used instead.
+
+Set `DATABASE_URL`, `JWT_SECRET`, and `JWT_EXPIRATION_MINUTES` in `.env`; see `.env.example`.
 
 Optional: [Docker Compose](https://docs.docker.com/compose/) (see `compose.yml.example`) or [Bruno](https://www.usebruno.com/) for API testing (see `bruno/`).
 
