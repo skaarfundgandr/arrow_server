@@ -125,21 +125,20 @@ pub async fn start() -> Result<(), ServerError> {
 }
 
 fn build_cors_layer(config: &Config) -> Result<CorsLayer, ServerError> {
+    cors_layer_for_origins(&config.cors_allowed_origins)
+}
+
+pub fn cors_layer_for_origins(origins: &[String]) -> Result<CorsLayer, ServerError> {
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
         .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
         .max_age(Duration::from_secs(600));
 
-    if config
-        .cors_allowed_origins
-        .iter()
-        .any(|origin| origin == "*")
-    {
+    if origins.iter().any(|origin| origin == "*") {
         return Ok(cors.allow_origin(Any));
     }
 
-    let origins = config
-        .cors_allowed_origins
+    let origins = origins
         .iter()
         .map(|origin| {
             origin.parse::<HeaderValue>().map_err(|error| {

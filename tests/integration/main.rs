@@ -8,6 +8,7 @@
 mod category_controller_tests;
 mod category_repo_tests;
 pub mod common;
+mod cors_tests;
 mod crypto_vector_tests;
 mod database_tests;
 mod order_controller_tests;
@@ -20,6 +21,7 @@ mod product_controller_tests;
 mod product_repo_tests;
 mod product_service_tests;
 mod qr_controller_tests;
+mod rate_limit_tests;
 mod role_controller_tests;
 mod role_repo_tests;
 mod user_controller_tests;
