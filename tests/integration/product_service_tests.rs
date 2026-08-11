@@ -284,7 +284,9 @@ async fn test_get_product_not_found() {
     assert!(result.is_ok());
     assert!(result.unwrap().is_none());
 
-    let result = service.get_product_by_name(&uniq("NonExistent"), read_role).await;
+    let result = service
+        .get_product_by_name(&uniq("NonExistent"), read_role)
+        .await;
 
     assert!(result.is_ok());
     assert!(result.unwrap().is_none());
@@ -379,7 +381,14 @@ async fn test_update_product_partial() {
         .expect("Product not found");
 
     service
-        .update_product(product.product_id, Some(&new_name), None, None, None, write_role)
+        .update_product(
+            product.product_id,
+            Some(&new_name),
+            None,
+            None,
+            None,
+            write_role,
+        )
         .await
         .expect("Failed to update product");
 
@@ -405,14 +414,7 @@ async fn test_update_product_not_found() {
     let service = ProductService::new();
 
     let result = service
-        .update_product(
-            i32::MAX - 71,
-            Some("NewName"),
-            None,
-            None,
-            None,
-            write_role,
-        )
+        .update_product(i32::MAX - 71, Some("NewName"), None, None, None, write_role)
         .await;
 
     assert_eq!(
@@ -454,7 +456,14 @@ async fn test_update_product_without_permission() {
         .expect("Product not found");
 
     let result = service
-        .update_product(product.product_id, Some("NewName"), None, None, None, read_role)
+        .update_product(
+            product.product_id,
+            Some("NewName"),
+            None,
+            None,
+            None,
+            read_role,
+        )
         .await;
 
     assert_eq!(
@@ -730,14 +739,20 @@ async fn test_upload_product_image_with_admin_permission() {
         .expect("Product not found");
 
     let result = service
-        .upload_product_image(product.product_id, &jpeg_bytes(), Some("image/jpeg"), admin_role)
+        .upload_product_image(
+            product.product_id,
+            &jpeg_bytes(),
+            Some("image/jpeg"),
+            admin_role,
+        )
         .await;
 
     assert!(result.is_ok(), "ADMIN should be able to upload an image");
-    assert!(stub
-        .calls()
-        .iter()
-        .any(|call| matches!(call, BlobCall::Upload { .. })));
+    assert!(
+        stub.calls()
+            .iter()
+            .any(|call| matches!(call, BlobCall::Upload { .. }))
+    );
 }
 
 #[tokio::test]
@@ -773,7 +788,12 @@ async fn test_upload_product_image_without_permission() {
         .expect("Product not found");
 
     let result = service
-        .upload_product_image(product.product_id, &png_bytes(), Some("image/png"), read_role)
+        .upload_product_image(
+            product.product_id,
+            &png_bytes(),
+            Some("image/png"),
+            read_role,
+        )
         .await;
 
     assert_eq!(
@@ -842,7 +862,12 @@ async fn test_upload_product_image_too_large() {
     oversized.resize(2 * 1024 * 1024 + 1, 0);
 
     let result = service
-        .upload_product_image(product.product_id, &oversized, Some("image/png"), write_role)
+        .upload_product_image(
+            product.product_id,
+            &oversized,
+            Some("image/png"),
+            write_role,
+        )
         .await;
 
     assert_eq!(
@@ -886,7 +911,12 @@ async fn test_upload_product_image_invalid_magic_bytes() {
         .expect("Product not found");
 
     let result = service
-        .upload_product_image(product.product_id, &gif_bytes(), Some("image/png"), write_role)
+        .upload_product_image(
+            product.product_id,
+            &gif_bytes(),
+            Some("image/png"),
+            write_role,
+        )
         .await;
 
     assert_eq!(
@@ -930,7 +960,12 @@ async fn test_upload_product_image_mime_mismatch() {
         .expect("Product not found");
 
     let result = service
-        .upload_product_image(product.product_id, &png_bytes(), Some("image/jpeg"), write_role)
+        .upload_product_image(
+            product.product_id,
+            &png_bytes(),
+            Some("image/jpeg"),
+            write_role,
+        )
         .await;
 
     assert_eq!(
@@ -974,7 +1009,12 @@ async fn test_upload_product_image_webp() {
         .expect("Product not found");
 
     let blob_name = service
-        .upload_product_image(product.product_id, &webp_bytes(), Some("image/webp"), write_role)
+        .upload_product_image(
+            product.product_id,
+            &webp_bytes(),
+            Some("image/webp"),
+            write_role,
+        )
         .await
         .expect("Failed to upload webp image");
 
@@ -1105,12 +1145,22 @@ async fn test_upload_product_image_replaces_and_deletes_old_blob() {
         .expect("Product not found");
 
     let first = service
-        .upload_product_image(product.product_id, &png_bytes(), Some("image/png"), write_role)
+        .upload_product_image(
+            product.product_id,
+            &png_bytes(),
+            Some("image/png"),
+            write_role,
+        )
         .await
         .expect("Failed to upload first image");
 
     let second = service
-        .upload_product_image(product.product_id, &jpeg_bytes(), Some("image/jpeg"), write_role)
+        .upload_product_image(
+            product.product_id,
+            &jpeg_bytes(),
+            Some("image/jpeg"),
+            write_role,
+        )
         .await
         .expect("Failed to upload second image");
 
@@ -1170,7 +1220,12 @@ async fn test_delete_product_image_admin() {
         .expect("Product not found");
 
     let blob_name = service
-        .upload_product_image(product.product_id, &png_bytes(), Some("image/png"), write_role)
+        .upload_product_image(
+            product.product_id,
+            &png_bytes(),
+            Some("image/png"),
+            write_role,
+        )
         .await
         .expect("Failed to upload image");
 
@@ -1338,7 +1393,12 @@ async fn test_delete_product_deletes_blob() {
         .expect("Product not found");
 
     let blob_name = service
-        .upload_product_image(product.product_id, &png_bytes(), Some("image/png"), write_role)
+        .upload_product_image(
+            product.product_id,
+            &png_bytes(),
+            Some("image/png"),
+            write_role,
+        )
         .await
         .expect("Failed to upload image");
 
@@ -1394,11 +1454,18 @@ async fn test_delete_product_ignores_blob_delete_failure() {
         .expect("Product not found");
 
     service
-        .upload_product_image(product.product_id, &png_bytes(), Some("image/png"), write_role)
+        .upload_product_image(
+            product.product_id,
+            &png_bytes(),
+            Some("image/png"),
+            write_role,
+        )
         .await
         .expect("Failed to upload image");
 
-    let result = service.delete_product(product.product_id, delete_role).await;
+    let result = service
+        .delete_product(product.product_id, delete_role)
+        .await;
 
     assert!(
         result.is_ok(),

@@ -19,8 +19,8 @@ use arrow_server_lib::security::auth::AuthService;
 use arrow_server_lib::services::blob_storage_service::{BlobStore, BlobStoreError};
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
-use diesel_async::pooled_connection::deadpool::Object;
 use diesel_async::AsyncMysqlConnection;
+use diesel_async::pooled_connection::deadpool::Object;
 use std::str::FromStr;
 use std::sync::Mutex;
 use std::sync::Once;
@@ -174,7 +174,12 @@ pub async fn create_user_with_role(username: &str, role_name: &str) -> (User, Ro
     (user, role)
 }
 
-pub async fn create_order(user_id: i32, product_id: i32, total_amount: &str, status: &str) -> Order {
+pub async fn create_order(
+    user_id: i32,
+    product_id: i32,
+    total_amount: &str,
+    status: &str,
+) -> Order {
     let repo = OrderRepo::new();
     let order_id = repo
         .create_with_items(
@@ -183,11 +188,7 @@ pub async fn create_order(user_id: i32, product_id: i32, total_amount: &str, sta
                 total_amount: BigDecimal::from_str(total_amount).unwrap(),
                 status: status.to_string(),
             },
-            vec![(
-                product_id,
-                1,
-                BigDecimal::from_str(total_amount).unwrap(),
-            )],
+            vec![(product_id, 1, BigDecimal::from_str(total_amount).unwrap())],
         )
         .await
         .expect("Failed to add order");
@@ -244,7 +245,9 @@ pub async fn ensure_customer_role() {
                     return;
                 }
                 if let Ok(Some(role)) = repo.get_by_name("CUSTOMER").await {
-                    let _ = repo.set_permissions(role.role_id, RolePermissions::Write).await;
+                    let _ = repo
+                        .set_permissions(role.role_id, RolePermissions::Write)
+                        .await;
                 }
             });
             std::mem::forget(rt);
@@ -256,9 +259,17 @@ pub async fn ensure_customer_role() {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BlobCall {
-    Upload { bytes_len: usize, content_type: String },
-    Delete { blob_name: String },
-    Mint { blob_name: String, ttl_minutes: u64 },
+    Upload {
+        bytes_len: usize,
+        content_type: String,
+    },
+    Delete {
+        blob_name: String,
+    },
+    Mint {
+        blob_name: String,
+        ttl_minutes: u64,
+    },
 }
 
 #[derive(Debug, Default)]

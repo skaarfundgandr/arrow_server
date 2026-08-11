@@ -6,9 +6,7 @@ use arrow_server_lib::data::repos::traits::repository::Repository;
 use bigdecimal::BigDecimal;
 use std::str::FromStr;
 
-use crate::common::{
-    add_order_product, create_order, create_product, create_user, uniq,
-};
+use crate::common::{add_order_product, create_order, create_product, create_user, uniq};
 
 #[tokio::test]
 async fn test_create_order_product() {
@@ -36,14 +34,8 @@ async fn test_create_order_product() {
     assert_eq!(op.order_id, order.order_id);
     assert_eq!(op.product_id, product_2.product_id);
     assert_eq!(op.quantity, 3);
-    assert_eq!(
-        op.unit_price,
-        BigDecimal::from_str("10.00").unwrap()
-    );
-    assert_eq!(
-        op.line_total,
-        Some(BigDecimal::from_str("30.00").unwrap())
-    );
+    assert_eq!(op.unit_price, BigDecimal::from_str("10.00").unwrap());
+    assert_eq!(op.line_total, Some(BigDecimal::from_str("30.00").unwrap()));
 }
 
 #[tokio::test]
@@ -287,7 +279,9 @@ async fn test_order_product_decimal_precision() {
         quantity: Some(3),
         unit_price: Some(BigDecimal::from_str("99.99").unwrap()),
     };
-    repo.update(composite_id, update).await.expect("Failed update");
+    repo.update(composite_id, update)
+        .await
+        .expect("Failed update");
 
     let fetched = repo
         .get_by_id(composite_id)

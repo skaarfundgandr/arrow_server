@@ -301,8 +301,7 @@ pub async fn upload_product_image(
                 return (StatusCode::BAD_REQUEST, "Unsupported image type").into_response();
             }
             Err(ProductServiceError::StorageNotConfigured) => {
-                return (StatusCode::SERVICE_UNAVAILABLE, "Storage not configured")
-                    .into_response();
+                return (StatusCode::SERVICE_UNAVAILABLE, "Storage not configured").into_response();
             }
             Err(_) => {
                 return (
@@ -334,15 +333,17 @@ pub async fn delete_product_image(
     }
 
     for role_id in roles {
-        match service.delete_product_image(product_id, role_id as i32).await {
+        match service
+            .delete_product_image(product_id, role_id as i32)
+            .await
+        {
             Ok(_) => return (StatusCode::OK, "Product image deleted").into_response(),
             Err(ProductServiceError::PermissionDenied) => continue,
             Err(ProductServiceError::ProductNotFound) => {
                 return (StatusCode::NOT_FOUND, "Product not found").into_response();
             }
             Err(ProductServiceError::StorageNotConfigured) => {
-                return (StatusCode::SERVICE_UNAVAILABLE, "Storage not configured")
-                    .into_response();
+                return (StatusCode::SERVICE_UNAVAILABLE, "Storage not configured").into_response();
             }
             Err(_) => {
                 return (

@@ -8,11 +8,9 @@ use crate::data::models::categories::{Category, NewCategory, UpdateCategory};
 use crate::data::models::order::Order;
 use crate::data::models::order_product::OrderProduct;
 use crate::data::models::product::Product;
+use crate::data::models::roles::{PermissionString, Role, RolePermissions, UpdateRole};
 use crate::data::models::schema::sql_types::RolesPermissionsSet;
 use crate::data::models::user::{NewUser, UpdateUser};
-use crate::data::models::roles::{
-    PermissionString, RolePermissions, UpdateRole, Role,
-};
 use bigdecimal::{BigDecimal, FromPrimitive};
 use diesel::deserialize::FromSql;
 use diesel::mysql::{Mysql, MysqlValue};
@@ -143,8 +141,7 @@ impl From<(Order, Vec<(OrderProduct, Product)>)> for OrderResponse {
                 product: ProductResponse::from(p),
                 quantity: op.quantity,
                 unit_price: op.unit_price.clone(),
-                line_total: &op.unit_price
-                    * BigDecimal::from_i32(op.quantity).unwrap_or_default(),
+                line_total: &op.unit_price * BigDecimal::from_i32(op.quantity).unwrap_or_default(),
             })
             .collect();
 
@@ -160,8 +157,6 @@ impl From<(Order, Vec<(OrderProduct, Product)>)> for OrderResponse {
         }
     }
 }
-
-
 
 impl From<Product> for ProductResponse {
     fn from(product: Product) -> Self {

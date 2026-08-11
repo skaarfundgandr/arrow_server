@@ -62,8 +62,12 @@ fn app() -> Router {
 
 #[tokio::test]
 async fn test_create_order_success() {
-    let (user_id, token) =
-        create_token_user(&uniq("order-writer"), &uniq("writer-role"), RolePermissions::Write).await;
+    let (user_id, token) = create_token_user(
+        &uniq("order-writer"),
+        &uniq("writer-role"),
+        RolePermissions::Write,
+    )
+    .await;
     let product = create_product(&uniq("ProductOne")).await;
 
     let response = app()
@@ -163,10 +167,18 @@ async fn test_create_order_invalid_token_unauthorized() {
 
 #[tokio::test]
 async fn test_get_all_orders_success() {
-    let (writer_id, _) =
-        create_token_user(&uniq("order-writer"), &uniq("writer-role"), RolePermissions::Write).await;
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (writer_id, _) = create_token_user(
+        &uniq("order-writer"),
+        &uniq("writer-role"),
+        RolePermissions::Write,
+    )
+    .await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
     let product = create_product(&uniq("ProductOne")).await;
     let order = make_order(writer_id, product.product_id, "20.00", "Pending").await;
 
@@ -194,8 +206,12 @@ async fn test_get_all_orders_success() {
 
 #[tokio::test]
 async fn test_response_per_item_quantities() {
-    let (_, token) =
-        create_token_user(&uniq("order-writer"), &uniq("writer-role"), RolePermissions::Write).await;
+    let (_, token) = create_token_user(
+        &uniq("order-writer"),
+        &uniq("writer-role"),
+        RolePermissions::Write,
+    )
+    .await;
     let pid1 = create_product_with_price(&uniq("ProductOne"), "10.00").await;
     let pid2 = create_product_with_price(&uniq("ProductTwo"), "25.00").await;
 
@@ -253,10 +269,7 @@ async fn test_response_per_item_quantities() {
         order.products[1].line_total,
         BigDecimal::from_str("75.00").unwrap()
     );
-    assert_eq!(
-        order.total_amount,
-        BigDecimal::from_str("95.00").unwrap()
-    );
+    assert_eq!(order.total_amount, BigDecimal::from_str("95.00").unwrap());
 
     let raw: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(raw["order"].get("quantity").is_none());
@@ -264,8 +277,12 @@ async fn test_response_per_item_quantities() {
 
 #[tokio::test]
 async fn test_cancel_order_owner_success() {
-    let (owner_id, token) =
-        create_token_user(&uniq("order-owner"), &uniq("owner-role"), RolePermissions::Write).await;
+    let (owner_id, token) = create_token_user(
+        &uniq("order-owner"),
+        &uniq("owner-role"),
+        RolePermissions::Write,
+    )
+    .await;
     let product = create_product(&uniq("ProductOne")).await;
 
     let app = app();
@@ -332,10 +349,18 @@ async fn test_cancel_order_owner_success() {
 
 #[tokio::test]
 async fn test_cancel_order_admin_success() {
-    let (_, owner_token) =
-        create_token_user(&uniq("order-owner"), &uniq("owner-role"), RolePermissions::Write).await;
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (_, owner_token) = create_token_user(
+        &uniq("order-owner"),
+        &uniq("owner-role"),
+        RolePermissions::Write,
+    )
+    .await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
     let product = create_product(&uniq("ProductOne")).await;
 
     let app = app();
@@ -384,8 +409,12 @@ async fn test_cancel_order_admin_success() {
 
 #[tokio::test]
 async fn test_cancel_order_not_found() {
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
 
     let response = app()
         .oneshot(
@@ -404,10 +433,18 @@ async fn test_cancel_order_not_found() {
 
 #[tokio::test]
 async fn test_delete_order_admin_success() {
-    let (_, owner_token) =
-        create_token_user(&uniq("order-owner"), &uniq("owner-role"), RolePermissions::Write).await;
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (_, owner_token) = create_token_user(
+        &uniq("order-owner"),
+        &uniq("owner-role"),
+        RolePermissions::Write,
+    )
+    .await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
     let product = create_product(&uniq("ProductOne")).await;
 
     let app = app();
@@ -469,8 +506,12 @@ async fn test_delete_order_admin_success() {
 
 #[tokio::test]
 async fn test_delete_order_not_found() {
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
 
     let response = app()
         .oneshot(
@@ -489,10 +530,18 @@ async fn test_delete_order_not_found() {
 
 #[tokio::test]
 async fn test_get_orders_by_status_query() {
-    let (writer_id, _) =
-        create_token_user(&uniq("order-writer"), &uniq("writer-role"), RolePermissions::Write).await;
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (writer_id, _) = create_token_user(
+        &uniq("order-writer"),
+        &uniq("writer-role"),
+        RolePermissions::Write,
+    )
+    .await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
     let product = create_product(&uniq("ProductOne")).await;
     let order_a = make_order(writer_id, product.product_id, "10.00", "Pending").await;
     let order_b = make_order(writer_id, product.product_id, "20.00", "Pending").await;
@@ -551,8 +600,12 @@ async fn test_get_orders_by_status_query() {
 
 #[tokio::test]
 async fn test_get_orders_by_invalid_status_empty() {
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
 
     let response = app()
         .oneshot(
@@ -573,8 +626,12 @@ async fn test_get_orders_by_invalid_status_empty() {
 
 #[tokio::test]
 async fn test_get_all_orders_non_admin_forbidden() {
-    let (_, reader_token) =
-        create_token_user(&uniq("order-reader"), &uniq("reader-role"), RolePermissions::Read).await;
+    let (_, reader_token) = create_token_user(
+        &uniq("order-reader"),
+        &uniq("reader-role"),
+        RolePermissions::Read,
+    )
+    .await;
 
     let response = app()
         .oneshot(
@@ -617,10 +674,18 @@ async fn test_get_user_orders_by_name() {
 
 #[tokio::test]
 async fn test_update_order_status_success() {
-    let (writer_id, writer_token) =
-        create_token_user(&uniq("order-writer"), &uniq("writer-role"), RolePermissions::Write).await;
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (writer_id, writer_token) = create_token_user(
+        &uniq("order-writer"),
+        &uniq("writer-role"),
+        RolePermissions::Write,
+    )
+    .await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
     let product = create_product(&uniq("ProductOne")).await;
     let order = make_order(writer_id, product.product_id, "10.00", "Pending").await;
 
@@ -662,8 +727,12 @@ async fn test_update_order_status_success() {
 
 #[tokio::test]
 async fn test_update_order_status_not_found() {
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
 
     let response = app()
         .oneshot(
@@ -688,8 +757,12 @@ async fn test_update_order_status_not_found() {
 
 #[tokio::test]
 async fn test_update_order_status_invalid_status() {
-    let (_, admin_token) =
-        create_token_user(&uniq("order-admin"), &uniq("admin-role"), RolePermissions::Admin).await;
+    let (_, admin_token) = create_token_user(
+        &uniq("order-admin"),
+        &uniq("admin-role"),
+        RolePermissions::Admin,
+    )
+    .await;
 
     let response = app()
         .oneshot(
@@ -745,7 +818,12 @@ async fn test_get_order_via_order_url() {
     let created: CreateOrderResponse = serde_json::from_slice(&body).unwrap();
     let order_id = created.order.order_id;
 
-    let order_path = created.order_url.split("/api/v1").last().unwrap().to_string();
+    let order_path = created
+        .order_url
+        .split("/api/v1")
+        .last()
+        .unwrap()
+        .to_string();
     let response = app
         .oneshot(
             Request::builder()
@@ -798,9 +876,7 @@ async fn test_get_order_tampered_order_url() {
     let url = format!("/orders/{}?exp={}&sig=deadbeef", order_id, now + 3600);
 
     let response = app
-        .oneshot(
-            Request::builder().uri(url).body(Body::empty()).unwrap(),
-        )
+        .oneshot(Request::builder().uri(url).body(Body::empty()).unwrap())
         .await
         .unwrap();
 
@@ -844,9 +920,7 @@ async fn test_get_order_expired_order_url() {
     let url = format!("/orders/{}?exp={}&sig={}", order_id, past_exp, sig);
 
     let response = app
-        .oneshot(
-            Request::builder().uri(url).body(Body::empty()).unwrap(),
-        )
+        .oneshot(Request::builder().uri(url).body(Body::empty()).unwrap())
         .await
         .unwrap();
 

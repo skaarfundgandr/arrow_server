@@ -82,7 +82,9 @@ impl std::fmt::Display for ProductServiceError {
             ProductServiceError::ProductUpdateFailed => write!(f, "Product update failed"),
             ProductServiceError::ProductDeletionFailed => write!(f, "Product deletion failed"),
             ProductServiceError::PermissionDenied => write!(f, "Permission denied"),
-            ProductServiceError::ImageTooLarge => write!(f, "Image exceeds the maximum allowed size"),
+            ProductServiceError::ImageTooLarge => {
+                write!(f, "Image exceeds the maximum allowed size")
+            }
             ProductServiceError::InvalidImageType => write!(f, "Image type is not supported"),
             ProductServiceError::ImageUploadFailed => write!(f, "Image upload failed"),
             ProductServiceError::ImageDeletionFailed => write!(f, "Image deletion failed"),

@@ -23,8 +23,7 @@ async fn test_create_user() {
     };
 
     assert!(
-        auth
-            .verify_password(raw_password, &hashed)
+        auth.verify_password(raw_password, &hashed)
             .await
             .expect("Password verification failed")
     );
@@ -93,8 +92,7 @@ async fn test_update_user() {
 
     assert_eq!(updated_user.username, new_username);
     assert!(
-        auth
-            .verify_password("newpassword", &updated_user.password_hash)
+        auth.verify_password("newpassword", &updated_user.password_hash)
             .await
             .expect("Verification failed")
     );
@@ -124,8 +122,7 @@ async fn test_update_user_partial() {
 
     assert_eq!(updated_user.username, new_username);
     assert!(
-        auth
-            .verify_password("testpass", &updated_user.password_hash)
+        auth.verify_password("testpass", &updated_user.password_hash)
             .await
             .expect("Verification failed"),
         "Password should remain unchanged"
@@ -137,7 +134,9 @@ async fn test_delete_user() {
     let repo = UserRepo::new();
     let user = create_user(&uniq("delete_user")).await;
 
-    repo.delete(user.user_id).await.expect("Failed to delete user");
+    repo.delete(user.user_id)
+        .await
+        .expect("Failed to delete user");
 
     let deleted_user = repo.get_by_id(user.user_id).await.expect("Query failed");
 

@@ -22,8 +22,8 @@ use std::sync::Arc;
 use tower::ServiceExt;
 
 use crate::common::{
-    create_category, create_product as make_product, create_user_with_role, png_bytes, uniq,
-    StubBlobStore,
+    StubBlobStore, create_category, create_product as make_product, create_user_with_role,
+    png_bytes, uniq,
 };
 
 async fn create_token_user(role_name: &str, permission: RolePermissions) -> String {
@@ -374,7 +374,10 @@ async fn test_upload_product_image_success() {
                 .method("POST")
                 .uri(format!("/products/{}/image", product.product_id))
                 .header("Authorization", format!("Bearer {}", token))
-                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap(),
         )
@@ -388,11 +391,11 @@ async fn test_upload_product_image_success() {
         .await
         .expect("Query failed")
         .expect("Product not found");
-    assert!(stored.product_image_uri.is_some(), "Blob path should be stored");
-    assert!(stored
-        .product_image_uri
-        .unwrap()
-        .starts_with("products/"));
+    assert!(
+        stored.product_image_uri.is_some(),
+        "Blob path should be stored"
+    );
+    assert!(stored.product_image_uri.unwrap().starts_with("products/"));
 }
 
 #[tokio::test]
@@ -420,7 +423,10 @@ async fn test_delete_product_image_success() {
                 .method("POST")
                 .uri(format!("/products/{}/image", product.product_id))
                 .header("Authorization", format!("Bearer {}", token.clone()))
-                .header("content-type", format!("multipart/form-data; boundary={}", boundary))
+                .header(
+                    "content-type",
+                    format!("multipart/form-data; boundary={}", boundary),
+                )
                 .body(Body::from(body))
                 .unwrap(),
         )

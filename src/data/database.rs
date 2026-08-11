@@ -1,6 +1,6 @@
 use diesel_async::AsyncMysqlConnection;
+use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::pooled_connection::deadpool::{BuildError, Object, Pool, PoolError};
-use diesel_async::pooled_connection::{AsyncDieselConnectionManager};
 use dotenvy::dotenv;
 use once_cell::sync::Lazy;
 use std::env;
@@ -41,9 +41,7 @@ impl Database {
         }
     }
 
-    pub async fn get_connection(
-        &self,
-    ) -> Result<Object<AsyncMysqlConnection>, DatabaseError> {
+    pub async fn get_connection(&self) -> Result<Object<AsyncMysqlConnection>, DatabaseError> {
         match &self.pool {
             Some(pool) => pool.get().await.map_err(DatabaseError::PoolGet),
             None => Err(DatabaseError::PoolUnavailable),

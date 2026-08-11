@@ -1,6 +1,6 @@
 use crate::data::database::Database;
 use crate::data::models::roles::Role;
-use crate::data::models::user_roles::{NewUserRole};
+use crate::data::models::user_roles::NewUserRole;
 use diesel::prelude::*;
 use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
@@ -14,7 +14,11 @@ impl UserRoleRepo {
         UserRoleRepo {}
     }
 
-    pub async fn add_user_role(&self, user_id_val: i32, role_id_val: i32) -> Result<(), result::Error> {
+    pub async fn add_user_role(
+        &self,
+        user_id_val: i32,
+        role_id_val: i32,
+    ) -> Result<(), result::Error> {
         use crate::data::models::schema::user_roles::dsl::user_roles;
 
         let db = Database::new().await;
@@ -43,7 +47,11 @@ impl UserRoleRepo {
         .await
     }
 
-    pub async fn remove_user_role(&self, user_id_val: i32, role_id_val: i32) -> Result<(), result::Error> {
+    pub async fn remove_user_role(
+        &self,
+        user_id_val: i32,
+        role_id_val: i32,
+    ) -> Result<(), result::Error> {
         use crate::data::models::schema::user_roles::dsl::{role_id, user_id, user_roles};
 
         let db = Database::new().await;
@@ -56,9 +64,13 @@ impl UserRoleRepo {
 
         conn.transaction(|connection| {
             async move {
-                diesel::delete(user_roles.filter(user_id.eq(user_id_val)).filter(role_id.eq(role_id_val)))
-                    .execute(connection)
-                    .await?;
+                diesel::delete(
+                    user_roles
+                        .filter(user_id.eq(user_id_val))
+                        .filter(role_id.eq(role_id_val)),
+                )
+                .execute(connection)
+                .await?;
                 Ok(())
             }
             .scope_boxed()
@@ -86,7 +98,7 @@ impl UserRoleRepo {
             .select(crate::data::models::roles::Role::as_select())
             .load::<Role>(&mut conn)
             .await?;
-            
+
         Ok(result)
     }
 }

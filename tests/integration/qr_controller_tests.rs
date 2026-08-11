@@ -37,8 +37,7 @@ fn app() -> Router {
 
 #[tokio::test]
 async fn test_ordering_qr_forbidden_for_non_admin() {
-    let reader_token =
-        create_token_user(&uniq("qr-reader"), RolePermissions::Read).await;
+    let reader_token = create_token_user(&uniq("qr-reader"), RolePermissions::Read).await;
 
     let response = app()
         .oneshot(
@@ -57,8 +56,7 @@ async fn test_ordering_qr_forbidden_for_non_admin() {
 
 #[tokio::test]
 async fn test_ordering_qr_returns_svg_for_admin() {
-    let admin_token =
-        create_token_user(&uniq("qr-admin"), RolePermissions::Admin).await;
+    let admin_token = create_token_user(&uniq("qr-admin"), RolePermissions::Admin).await;
 
     let response = app()
         .oneshot(

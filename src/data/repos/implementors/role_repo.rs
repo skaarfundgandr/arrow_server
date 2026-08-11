@@ -27,7 +27,11 @@ impl RoleRepo {
             )
         })?;
 
-        match roles.filter(name.eq(name_val)).first::<Role>(&mut conn).await {
+        match roles
+            .filter(name.eq(name_val))
+            .first::<Role>(&mut conn)
+            .await
+        {
             Ok(value) => Ok(Some(value)),
             Err(result::Error::NotFound) => Ok(None),
             Err(e) => Err(e),
@@ -155,7 +159,11 @@ impl Repository for RoleRepo {
             )
         })?;
 
-        match roles.filter(role_id.eq(id)).first::<Self::Item>(&mut conn).await {
+        match roles
+            .filter(role_id.eq(id))
+            .first::<Self::Item>(&mut conn)
+            .await
+        {
             Ok(value) => Ok(Some(value)),
             Err(result::Error::NotFound) => Ok(None),
             Err(e) => Err(e),

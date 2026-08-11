@@ -3,10 +3,10 @@ use crate::api::controllers::dto::login_dto::LoginDTO;
 use crate::api::controllers::dto::role_dto::RoleDTO;
 use crate::api::controllers::dto::user_dto::{NewUserDTO, UpdateUserDTO, UserDTO, UserQueryParams};
 use crate::api::response::LoginResponse;
-use crate::data::models::user::{NewUser, UpdateUser, User};
 use crate::data::models::roles::RolePermissions;
-use crate::data::repos::implementors::user_repo::UserRepo;
+use crate::data::models::user::{NewUser, UpdateUser, User};
 use crate::data::repos::implementors::role_repo::RoleRepo;
+use crate::data::repos::implementors::user_repo::UserRepo;
 use crate::data::repos::implementors::user_role_repo::UserRoleRepo;
 use crate::data::repos::traits::repository::Repository;
 use crate::security::auth::AuthService;
@@ -93,7 +93,10 @@ pub async fn register_user(Json(new_user): Json<NewUserDTO>) -> impl IntoRespons
         .await
     {
         Ok(role) => {
-            if let Err(e) = user_role_repo.add_user_role(user.user_id, role.role_id).await {
+            if let Err(e) = user_role_repo
+                .add_user_role(user.user_id, role.role_id)
+                .await
+            {
                 tracing::error!("Failed to assign customer role: {}", e);
             }
         }

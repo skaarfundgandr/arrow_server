@@ -96,7 +96,9 @@ async fn test_delete_role() {
     let repo = RoleRepo::new();
     let role = create_role(&uniq("delete_role")).await;
 
-    repo.delete(role.role_id).await.expect("Failed to delete role");
+    repo.delete(role.role_id)
+        .await
+        .expect("Failed to delete role");
 
     let deleted_role = repo.get_by_id(role.role_id).await.expect("Query failed");
 

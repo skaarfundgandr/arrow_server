@@ -1,7 +1,13 @@
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::todo, clippy::unimplemented)]
-pub mod common;
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic,
+    clippy::todo,
+    clippy::unimplemented
+)]
 mod category_controller_tests;
 mod category_repo_tests;
+pub mod common;
 mod database_tests;
 mod order_controller_tests;
 mod order_pay_tests;

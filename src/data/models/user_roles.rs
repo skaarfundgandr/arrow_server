@@ -1,7 +1,7 @@
-use diesel::prelude::*;
+use crate::data::models::roles::Role;
 use crate::data::models::schema::*;
 use crate::data::models::user::User;
-use crate::data::models::roles::Role;
+use diesel::prelude::*;
 
 #[derive(Debug, Queryable, Identifiable, Associations, PartialEq, Clone)]
 #[diesel(table_name = user_roles)]

@@ -410,7 +410,11 @@ impl ProductService {
             .filter(|uri| is_blob_path(uri))
             && let Err(error) = self.blob_store.delete(previous).await
         {
-            tracing::warn!("Failed to delete replaced product image blob {}: {}", previous, error);
+            tracing::warn!(
+                "Failed to delete replaced product image blob {}: {}",
+                previous,
+                error
+            );
         }
 
         Ok(blob_name)
@@ -454,7 +458,11 @@ impl ProductService {
         if let Some(blob_name) = blob_name
             && let Err(error) = self.blob_store.delete(&blob_name).await
         {
-            tracing::warn!("Failed to delete product image blob {}: {}", blob_name, error);
+            tracing::warn!(
+                "Failed to delete product image blob {}: {}",
+                blob_name,
+                error
+            );
         }
 
         Ok(())

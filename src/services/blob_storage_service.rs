@@ -104,10 +104,8 @@ impl AzureBlobStore {
             None => {
                 let credential: Arc<dyn TokenCredential> = ManagedIdentityCredential::new(None)
                     .map_err(|error| BlobStoreError::Auth(error.to_string()))?;
-                let service_url = Url::parse(&format!(
-                    "https://{account}.blob.core.windows.net/"
-                ))
-                .map_err(|error| BlobStoreError::Auth(error.to_string()))?;
+                let service_url = Url::parse(&format!("https://{account}.blob.core.windows.net/"))
+                    .map_err(|error| BlobStoreError::Auth(error.to_string()))?;
                 let client = BlobServiceClient::new(service_url, Some(credential), None)
                     .map_err(|error| BlobStoreError::Auth(error.to_string()))?;
                 Some(client)
@@ -145,13 +143,13 @@ impl AzureBlobStore {
             .account_key
             .as_ref()
             .ok_or(BlobStoreError::SasUnavailable)?;
-        let query = Self::service_sas(key, account, container, blob_name, permissions, ttl_minutes)?;
+        let query =
+            Self::service_sas(key, account, container, blob_name, permissions, ttl_minutes)?;
         let url = Url::parse(&format!(
             "https://{account}.blob.core.windows.net/{container}/{blob_name}?{query}"
         ))
         .map_err(|error| BlobStoreError::Signing(error.to_string()))?;
-        BlobClient::new(url, None, None)
-            .map_err(|error| BlobStoreError::Auth(error.to_string()))
+        BlobClient::new(url, None, None).map_err(|error| BlobStoreError::Auth(error.to_string()))
     }
 
     fn service_sas(
@@ -221,7 +219,11 @@ impl BlobStore for AzureBlobStore {
             "image/jpeg" => "jpg",
             "image/png" => "png",
             "image/webp" => "webp",
-            _ => return Err(BlobStoreError::Upload(format!("unsupported content type {content_type}"))),
+            _ => {
+                return Err(BlobStoreError::Upload(format!(
+                    "unsupported content type {content_type}"
+                )));
+            }
         };
         let blob_name = format!("{BLOB_PATH_PREFIX}{}.{extension}", Uuid::new_v4());
 

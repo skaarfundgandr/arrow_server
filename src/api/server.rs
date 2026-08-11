@@ -1,7 +1,6 @@
 use crate::api::config::Config;
 use crate::api::routes::{
-    auth_routes, category_routes, order_routes, product_routes, qr_routes, role_routes,
-    user_routes,
+    auth_routes, category_routes, order_routes, product_routes, qr_routes, role_routes, user_routes,
 };
 use axum::body::Body;
 use axum::extract::Request;
@@ -13,9 +12,9 @@ use axum::{Router, middleware};
 use std::net::SocketAddr;
 use std::time::Duration;
 use tokio::net::TcpListener;
+use tower_governor::GovernorLayer;
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::key_extractor::SmartIpKeyExtractor;
-use tower_governor::GovernorLayer;
 use tower_http::cors::{Any, CorsLayer};
 
 const AUTH_LIMIT_PER_SECOND: u64 = 2;
@@ -116,10 +115,13 @@ pub async fn start() -> Result<(), ServerError> {
 
     tracing::info!("Listening on port 3000");
 
-    axum::serve(listener, router.into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .map_err(ServerError::Serve)
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .map_err(ServerError::Serve)
 }
 
 fn build_cors_layer(config: &Config) -> Result<CorsLayer, ServerError> {

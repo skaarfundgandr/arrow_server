@@ -67,9 +67,11 @@ impl OrderService {
         let mut total_amount = BigDecimal::from(0);
 
         for (pid, qty) in items {
-            let product = product_repo.get_by_id(pid).await
+            let product = product_repo
+                .get_by_id(pid)
+                .await
                 .map_err(|_| OrderServiceError::DatabaseError)?
-                .ok_or(OrderServiceError::OrderCreationFailed)?; 
+                .ok_or(OrderServiceError::OrderCreationFailed)?;
 
             let price = product.price;
             let qty_bd = BigDecimal::from_i32(qty).unwrap_or_default();
@@ -116,12 +118,15 @@ impl OrderService {
         target_user_id: i32,
     ) -> Result<Option<Vec<(Order, Vec<(OrderProduct, Product)>)>>, OrderServiceError> {
         let repo = OrderRepo::new();
-        let orders = repo.get_by_user_id(target_user_id)
+        let orders = repo
+            .get_by_user_id(target_user_id)
             .await
             .map_err(|_| OrderServiceError::DatabaseError)?;
 
         if let Some(orders) = orders {
-            let detailed = repo.attach_products(orders).await
+            let detailed = repo
+                .attach_products(orders)
+                .await
                 .map_err(|_| OrderServiceError::DatabaseError)?;
             Ok(Some(detailed))
         } else {
@@ -142,12 +147,15 @@ impl OrderService {
         }
 
         let repo = OrderRepo::new();
-        let orders = repo.get_all()
+        let orders = repo
+            .get_all()
             .await
             .map_err(|_| OrderServiceError::DatabaseError)?;
 
         if let Some(orders) = orders {
-            let detailed = repo.attach_products(orders).await
+            let detailed = repo
+                .attach_products(orders)
+                .await
                 .map_err(|_| OrderServiceError::DatabaseError)?;
             Ok(Some(detailed))
         } else {
@@ -169,7 +177,9 @@ impl OrderService {
             .map_err(|_| OrderServiceError::DatabaseError)?;
 
         if let Some(order) = order {
-            let detailed_list = repo.attach_products(vec![order]).await
+            let detailed_list = repo
+                .attach_products(vec![order])
+                .await
                 .map_err(|_| OrderServiceError::DatabaseError)?;
             Ok(detailed_list.into_iter().next())
         } else {
@@ -203,7 +213,9 @@ impl OrderService {
             .map_err(|_| OrderServiceError::DatabaseError)?;
 
         if let Some(order) = order {
-            let detailed_list = repo.attach_products(vec![order]).await
+            let detailed_list = repo
+                .attach_products(vec![order])
+                .await
                 .map_err(|_| OrderServiceError::DatabaseError)?;
             Ok(detailed_list.into_iter().next())
         } else {
@@ -293,8 +305,8 @@ impl OrderService {
             _ => return Err(OrderServiceError::PaymentConflict),
         }
 
-        let config = crate::api::config::Config::get()
-            .map_err(|_| OrderServiceError::ConfigError)?;
+        let config =
+            crate::api::config::Config::get().map_err(|_| OrderServiceError::ConfigError)?;
         let (final_status, message) = if order.total_amount > config.max_payment_amount {
             (
                 "failed".to_string(),
@@ -338,12 +350,15 @@ impl OrderService {
         }
 
         let repo = OrderRepo::new();
-        let orders = repo.get_by_status(status.as_str())
+        let orders = repo
+            .get_by_status(status.as_str())
             .await
             .map_err(|_| OrderServiceError::DatabaseError)?;
 
         if let Some(orders) = orders {
-            let detailed = repo.attach_products(orders).await
+            let detailed = repo
+                .attach_products(orders)
+                .await
                 .map_err(|_| OrderServiceError::DatabaseError)?;
             Ok(Some(detailed))
         } else {
@@ -364,12 +379,15 @@ impl OrderService {
         }
 
         let repo = OrderRepo::new();
-        let orders = repo.get_orders_by_role_name(role_name)
+        let orders = repo
+            .get_orders_by_role_name(role_name)
             .await
             .map_err(|_| OrderServiceError::DatabaseError)?;
-            
+
         if let Some(orders) = orders {
-            let detailed = repo.attach_products(orders).await
+            let detailed = repo
+                .attach_products(orders)
+                .await
                 .map_err(|_| OrderServiceError::DatabaseError)?;
             Ok(Some(detailed))
         } else {

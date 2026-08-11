@@ -168,7 +168,7 @@ pub async fn set_permission_by_name(
     }
 
     let service = RoleService::new();
-    
+
     // Parse permission
     let permission = match RolePermissions::from_str(&permission_dto.permission) {
         Ok(p) => p,
@@ -259,13 +259,9 @@ pub async fn remove_permission(
     // But the `update` method on repo takes `UpdateRole`, which doesn't expose permissions (excluded from diesel macro).
     // We should use set_permissions with some 'Empty' or just raw SQL.
     // For now, let's just use `set_permissions` to READ (default).
-    
+
     match repo.set_permissions(role_id, RolePermissions::Read).await {
-        Ok(_) => (
-            StatusCode::OK,
-            "Permissions reset to READ (Default)",
-        )
-            .into_response(),
+        Ok(_) => (StatusCode::OK, "Permissions reset to READ (Default)").into_response(),
         Err(e) => {
             tracing::error!("Error updating role: {}", e);
             (StatusCode::INTERNAL_SERVER_ERROR, "Failed to update role").into_response()

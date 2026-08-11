@@ -15,10 +15,7 @@ async fn test_create_order() {
     let order = create_order(user.user_id, product.product_id, "20.00", "pending").await;
 
     assert_eq!(order.user_id, Some(user.user_id));
-    assert_eq!(
-        order.total_amount,
-        BigDecimal::from_str("20.00").unwrap()
-    );
+    assert_eq!(order.total_amount, BigDecimal::from_str("20.00").unwrap());
     assert_eq!(order.status, "pending".to_string());
 
     let orders = repo
@@ -29,7 +26,10 @@ async fn test_create_order() {
 
     assert_eq!(orders.len(), 1);
 
-    let detailed = repo.attach_products(orders).await.expect("Failed to attach");
+    let detailed = repo
+        .attach_products(orders)
+        .await
+        .expect("Failed to attach");
     assert_eq!(detailed[0].1.len(), 1);
     assert_eq!(detailed[0].1[0].0.quantity, 1);
     assert_eq!(
@@ -241,7 +241,9 @@ async fn test_delete_order() {
 
     let order = create_order(user.user_id, product.product_id, "10.00", "pending").await;
 
-    repo.delete(order.order_id).await.expect("Failed to delete order");
+    repo.delete(order.order_id)
+        .await
+        .expect("Failed to delete order");
 
     let deleted_order = repo.get_by_id(order.order_id).await.expect("Query failed");
 

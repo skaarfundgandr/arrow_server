@@ -49,14 +49,15 @@ impl RoleService {
 
         let role_repo = RoleRepo::new();
         let user_role_repo = UserRoleRepo::new();
-        
+
         let role = role_repo
             .get_by_name(role_name)
             .await
             .map_err(|_| RoleError::RoleNotFound)?;
 
         if let Some(role) = role {
-            user_role_repo.add_user_role(user_id, role.role_id)
+            user_role_repo
+                .add_user_role(user_id, role.role_id)
                 .await
                 .map_err(|_| RoleError::RoleAssignmentFailed)?;
             Ok(())
@@ -74,10 +75,7 @@ impl RoleService {
         use crate::data::repos::implementors::role_repo::RoleRepo;
 
         let repo = RoleRepo::new();
-        let new_role = NewRole {
-            name,
-            description,
-        };
+        let new_role = NewRole { name, description };
         repo.add(new_role)
             .await
             .map_err(|_| RoleError::RoleCreationFailed)?;

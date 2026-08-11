@@ -3,10 +3,10 @@ use arrow_server_lib::api::controllers::order_controller::{
     cancel_order, create_order, get_user_orders_by_name, pay_order,
 };
 use arrow_server_lib::api::response::{CreateOrderResponse, PayOrderResponse};
-use arrow_server_lib::data::models::user::NewUser;
 use arrow_server_lib::data::models::roles::{NewRole, RolePermissions};
-use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
+use arrow_server_lib::data::models::user::NewUser;
 use arrow_server_lib::data::repos::implementors::role_repo::RoleRepo;
+use arrow_server_lib::data::repos::implementors::user_repo::UserRepo;
 use arrow_server_lib::data::repos::implementors::user_role_repo::UserRoleRepo;
 use arrow_server_lib::data::repos::traits::repository::Repository;
 use arrow_server_lib::security::auth::AuthService;
@@ -117,26 +117,27 @@ async fn create_guest_order(app: &Router, pid: i32, quantity: i32) -> i32 {
 }
 
 async fn create_order_with_quantity(pid: i32, quantity: i32) -> axum::response::Response {
-    app().oneshot(
-        Request::builder()
-            .method("POST")
-            .uri("/orders")
-            .header("content-type", "application/json")
-            .body(Body::from(
-                serde_json::to_vec(&json!({
-                    "products": [
-                        {
-                            "product_id": pid,
-                            "quantity": quantity
-                        }
-                    ]
-                }))
+    app()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/orders")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::to_vec(&json!({
+                        "products": [
+                            {
+                                "product_id": pid,
+                                "quantity": quantity
+                            }
+                        ]
+                    }))
+                    .unwrap(),
+                ))
                 .unwrap(),
-            ))
-            .unwrap(),
-    )
-    .await
-    .unwrap()
+        )
+        .await
+        .unwrap()
 }
 
 fn app() -> Router {
@@ -156,7 +157,9 @@ async fn test_pay_order_success_admin() {
         RolePermissions::Admin,
     )
     .await;
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 2).await;
@@ -190,7 +193,9 @@ async fn test_pay_order_fails_over_max_amount() {
         RolePermissions::Admin,
     )
     .await;
-    let pid = create_product_with_price(&uniq("pay_product"), "1500").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "1500")
+        .await
+        .product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -211,7 +216,10 @@ async fn test_pay_order_fails_over_max_amount() {
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let pay: PayOrderResponse = serde_json::from_slice(&body).unwrap();
     assert_eq!(pay.payment_status, "failed");
-    assert_eq!(pay.message, "Payment failed: amount exceeds the maximum allowed");
+    assert_eq!(
+        pay.message,
+        "Payment failed: amount exceeds the maximum allowed"
+    );
 }
 
 #[tokio::test]
@@ -243,7 +251,9 @@ async fn test_pay_order_not_found() {
 
 #[tokio::test]
 async fn test_pay_order_via_valid_order_url() {
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -278,7 +288,9 @@ async fn test_pay_order_forbidden_without_link() {
         RolePermissions::Read,
     )
     .await;
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -300,7 +312,9 @@ async fn test_pay_order_forbidden_without_link() {
 
 #[tokio::test]
 async fn test_pay_order_already_paid_conflict() {
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -338,7 +352,9 @@ async fn test_pay_order_already_paid_conflict() {
 
 #[tokio::test]
 async fn test_create_order_zero_quantity_bad_request() {
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let response = create_order_with_quantity(pid, 0).await;
 
@@ -347,7 +363,9 @@ async fn test_create_order_zero_quantity_bad_request() {
 
 #[tokio::test]
 async fn test_create_order_negative_quantity_bad_request() {
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let response = create_order_with_quantity(pid, -1).await;
 
@@ -386,7 +404,9 @@ async fn test_pay_order_exact_max_amount_paid() {
 
 #[tokio::test]
 async fn test_pay_order_tampered_signature_bad_request() {
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -410,7 +430,9 @@ async fn test_pay_order_tampered_signature_bad_request() {
 
 #[tokio::test]
 async fn test_pay_order_expired_url_gone() {
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -442,7 +464,9 @@ async fn test_cancel_guest_order_by_admin() {
         RolePermissions::Admin,
     )
     .await;
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let app = app();
     let order_id = create_guest_order(&app, pid, 1).await;
@@ -471,7 +495,9 @@ async fn test_cancel_own_order_read_only_owner_success() {
         RolePermissions::Read,
     )
     .await;
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let app = app();
 
@@ -528,7 +554,9 @@ async fn test_get_own_orders_read_only_success() {
         RolePermissions::Read,
     )
     .await;
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let app = app();
 
@@ -581,7 +609,9 @@ async fn test_get_own_orders_read_only_success() {
 
 #[tokio::test]
 async fn test_create_order_token_of_deleted_user_unauthorized() {
-    let pid = create_product_with_price(&uniq("pay_product"), "10").await.product_id;
+    let pid = create_product_with_price(&uniq("pay_product"), "10")
+        .await
+        .product_id;
 
     let now = chrono::Utc::now().timestamp() as usize;
     let claims = AccessClaims {

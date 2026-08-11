@@ -15,7 +15,9 @@ async fn test_create_order_with_write_permission() {
 
     let service = OrderService::new();
 
-    let result = service.create_order(Some(user_id), vec![(product_id, 2)]).await;
+    let result = service
+        .create_order(Some(user_id), vec![(product_id, 2)])
+        .await;
 
     assert!(
         result.is_ok(),
@@ -33,7 +35,9 @@ async fn test_create_order_with_admin_permission() {
 
     let service = OrderService::new();
 
-    let result = service.create_order(Some(user_id), vec![(product_id, 1)]).await;
+    let result = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
+        .await;
 
     assert!(
         result.is_ok(),
@@ -51,7 +55,9 @@ async fn test_create_order_without_permission() {
 
     let service = OrderService::new();
 
-    let result = service.create_order(Some(user_id), vec![(product_id, 1)]).await;
+    let result = service
+        .create_order(Some(user_id), vec![(product_id, 1)])
+        .await;
 
     assert!(
         result.is_ok(),

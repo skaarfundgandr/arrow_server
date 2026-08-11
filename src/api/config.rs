@@ -55,8 +55,10 @@ impl Config {
         let order_link_ttl_minutes =
             Config::var_or_parsed("ORDER_LINK_EXPIRATION_MINUTES", "1440")?;
         let api_base_url = Config::var_or("API_BASE_URL", "http://localhost:3000");
-        let ordering_base_url =
-            Config::var_or("ORDERING_BASE_URL", &format!("{}/api/v1/products", api_base_url));
+        let ordering_base_url = Config::var_or(
+            "ORDERING_BASE_URL",
+            &format!("{}/api/v1/products", api_base_url),
+        );
         let cors_allowed_origins = Config::var_or_list("CORS_ALLOWED_ORIGINS", "*")?;
         let max_payment_amount = Config::var_or_parsed("MAX_PAYMENT_AMOUNT", "1000.00")?;
         let azure_storage_account = Config::var_or_none("AZURE_STORAGE_ACCOUNT");
@@ -128,10 +130,9 @@ impl Config {
         T::Err: std::fmt::Display,
     {
         let raw = std::env::var(name).unwrap_or_else(|_| default.to_string());
-        raw.parse::<T>()
-            .map_err(|e| ConfigError::InvalidVar {
-                name: name.to_string(),
-                reason: e.to_string(),
-            })
+        raw.parse::<T>().map_err(|e| ConfigError::InvalidVar {
+            name: name.to_string(),
+            reason: e.to_string(),
+        })
     }
 }

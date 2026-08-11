@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use crate::data::database::Database;
 use crate::data::models::order::{NewOrder, Order, UpdateOrder};
 use crate::data::models::order_product::{NewOrderProduct, OrderProduct};
@@ -11,6 +10,7 @@ use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
 use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, AsyncMysqlConnection, RunQueryDsl};
+use std::collections::HashMap;
 
 pub struct OrderRepo {}
 
@@ -81,12 +81,8 @@ impl OrderRepo {
         role: &str,
     ) -> Result<Option<Vec<Order>>, result::Error> {
         use crate::data::models::schema::orders::dsl::{orders, user_id};
-        use crate::data::models::schema::user_roles::dsl::{
-            user_id as role_user_id, user_roles,
-        };
-        use crate::data::models::schema::roles::dsl::{
-            roles, name as role_name
-        };
+        use crate::data::models::schema::roles::dsl::{name as role_name, roles};
+        use crate::data::models::schema::user_roles::dsl::{user_id as role_user_id, user_roles};
 
         let db = Database::new().await;
 
@@ -127,8 +123,8 @@ impl OrderRepo {
         new_order: NewOrder,
         items: Vec<(i32, i32, BigDecimal)>,
     ) -> Result<i32, result::Error> {
-        use crate::data::models::schema::orders::dsl::{orders};
         use crate::data::models::schema::order_products::dsl::order_products;
+        use crate::data::models::schema::orders::dsl::orders;
 
         let db = Database::new().await;
         let mut conn = db.get_connection().await.map_err(|e| {
@@ -145,18 +141,21 @@ impl OrderRepo {
                     .execute(connection)
                     .await?;
 
-                let new_id: i32 = diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>("LAST_INSERT_ID()"))
-                    .get_result(connection)
-                    .await?;
+                let new_id: i32 = diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>(
+                    "LAST_INSERT_ID()",
+                ))
+                .get_result(connection)
+                .await?;
 
-                let new_items: Vec<NewOrderProduct> = items.into_iter().map(|(pid, qty, price)| {
-                    NewOrderProduct {
+                let new_items: Vec<NewOrderProduct> = items
+                    .into_iter()
+                    .map(|(pid, qty, price)| NewOrderProduct {
                         order_id: new_id,
                         product_id: pid,
                         quantity: qty,
                         unit_price: price,
-                    }
-                }).collect();
+                    })
+                    .collect();
 
                 diesel::insert_into(order_products)
                     .values(&new_items)
@@ -213,7 +212,7 @@ impl OrderRepo {
             return Ok(Vec::new());
         }
 
-        use crate::data::models::schema::order_products::dsl::{order_products, order_id};
+        use crate::data::models::schema::order_products::dsl::{order_id, order_products};
         use crate::data::models::schema::products::dsl::products;
 
         let db = Database::new().await;
@@ -233,15 +232,18 @@ impl OrderRepo {
             .await?;
 
         let mut map: HashMap<i32, Vec<(OrderProduct, Product)>> = HashMap::new();
-        
+
         for item in items_data {
             map.entry(item.0.order_id).or_default().push(item);
         }
 
-        let result = orders_list.into_iter().map(|o| {
-            let items = map.remove(&o.order_id).unwrap_or_default();
-            (o, items)
-        }).collect();
+        let result = orders_list
+            .into_iter()
+            .map(|o| {
+                let items = map.remove(&o.order_id).unwrap_or_default();
+                (o, items)
+            })
+            .collect();
 
         Ok(result)
     }

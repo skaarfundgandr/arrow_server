@@ -47,9 +47,7 @@ pub async fn get_orders_by_role(
                             .collect();
                         (StatusCode::OK, Json(response)).into_response()
                     }
-                    Err(_) => {
-                        (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response()
-                    }
+                    Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
                 };
             }
             Ok(false) => continue,
@@ -72,9 +70,8 @@ pub async fn get_all_orders(
     let service = OrderService::new();
     let roles = claims.roles.unwrap_or_default();
 
-    let status_filter: Option<Option<OrderStatus>> = params
-        .status
-        .map(|s| OrderStatus::from_str(&s).ok());
+    let status_filter: Option<Option<OrderStatus>> =
+        params.status.map(|s| OrderStatus::from_str(&s).ok());
 
     for role_id in roles {
         match service.is_admin(role_id as i32).await {
@@ -96,9 +93,7 @@ pub async fn get_all_orders(
                             .collect();
                         (StatusCode::OK, Json(response)).into_response()
                     }
-                    Err(_) => {
-                        (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response()
-                    }
+                    Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
                 };
             }
             Ok(false) => continue,
@@ -160,9 +155,7 @@ pub async fn get_order_by_id(
             Err(OrderUrlError::InvalidSignature) => {
                 (StatusCode::BAD_REQUEST, "Invalid order url").into_response()
             }
-            Err(OrderUrlError::Expired) => {
-                (StatusCode::GONE, "Order url expired").into_response()
-            }
+            Err(OrderUrlError::Expired) => (StatusCode::GONE, "Order url expired").into_response(),
             Err(OrderUrlError::Config) | Err(OrderUrlError::SigningKey) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Order url unavailable").into_response()
             }
@@ -273,7 +266,10 @@ pub async fn create_order(
             return (StatusCode::BAD_REQUEST, "Invalid item quantity").into_response();
         }
         Err(OrderServiceError::OrderCreationFailed) => {
-            return (StatusCode::BAD_REQUEST, "Failed to create order (check products)")
+            return (
+                StatusCode::BAD_REQUEST,
+                "Failed to create order (check products)",
+            )
                 .into_response();
         }
         Err(_) => {
@@ -296,7 +292,10 @@ pub async fn create_order(
         Ok(url) => url,
         Err(e) => {
             tracing::error!("Failed to build order url: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to build order url")
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to build order url",
+            )
                 .into_response();
         }
     };
@@ -454,9 +453,7 @@ pub async fn delete_order(claims: AccessClaims, Path(order_id): Path<i32>) -> im
                         (StatusCode::INTERNAL_SERVER_ERROR, "Failed to delete order")
                             .into_response()
                     }
-                    Err(_) => {
-                        (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response()
-                    }
+                    Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error").into_response(),
                 };
             }
             Ok(false) => continue,
@@ -499,7 +496,10 @@ pub async fn update_order_status(
 
     for role_id in roles {
         match service.is_admin(role_id as i32).await {
-            Ok(true) => match service.update_order_status(order_id, status, role_id as i32).await {
+            Ok(true) => match service
+                .update_order_status(order_id, status, role_id as i32)
+                .await
+            {
                 Ok(_) => {
                     return (StatusCode::OK, "Order status updated").into_response();
                 }
