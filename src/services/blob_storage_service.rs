@@ -7,7 +7,7 @@ use azure_storage_blob::clients::{BlobClient, BlobServiceClient};
 use azure_storage_blob::models::BlockBlobClientUploadOptions;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
-use hmac::Mac;
+use hmac::{KeyInit, Mac};
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -160,11 +160,30 @@ impl AzureBlobStore {
         permissions: &str,
         ttl_minutes: u64,
     ) -> Result<String, BlobStoreError> {
+        Self::service_sas_at(
+            key,
+            account,
+            container,
+            blob_name,
+            permissions,
+            ttl_minutes,
+            chrono::Utc::now(),
+        )
+    }
+
+    pub fn service_sas_at(
+        key: &str,
+        account: &str,
+        container: &str,
+        blob_name: &str,
+        permissions: &str,
+        ttl_minutes: u64,
+        now: chrono::DateTime<chrono::Utc>,
+    ) -> Result<String, BlobStoreError> {
         let decoded_key = BASE64
             .decode(key)
             .map_err(|error| BlobStoreError::Signing(format!("invalid account key: {error}")))?;
 
-        let now = chrono::Utc::now();
         let started_at = (now - chrono::Duration::minutes(5))
             .format("%Y-%m-%dT%H:%M:%SZ")
             .to_string();

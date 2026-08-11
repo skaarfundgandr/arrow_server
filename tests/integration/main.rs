@@ -8,6 +8,7 @@
 mod category_controller_tests;
 mod category_repo_tests;
 pub mod common;
+mod crypto_vector_tests;
 mod database_tests;
 mod order_controller_tests;
 mod order_pay_tests;

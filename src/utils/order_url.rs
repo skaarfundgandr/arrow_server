@@ -1,5 +1,5 @@
 use crate::api::config::Config;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
@@ -29,8 +29,16 @@ impl std::error::Error for OrderUrlError {}
 /// keyed with the configured QR signing secret.
 pub fn sign_order_url(order_id: i32, exp: u64) -> Result<String, OrderUrlError> {
     let config = Config::get().map_err(|_| OrderUrlError::Config)?;
-    let mut mac = HmacSha256::new_from_slice(config.qr_signing_secret.as_bytes())
-        .map_err(|_| OrderUrlError::SigningKey)?;
+    sign_order_url_with_key(&config.qr_signing_secret, order_id, exp)
+}
+
+pub fn sign_order_url_with_key(
+    secret: &str,
+    order_id: i32,
+    exp: u64,
+) -> Result<String, OrderUrlError> {
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).map_err(|_| OrderUrlError::SigningKey)?;
     mac.update(format!("order_id={}&exp={}", order_id, exp).as_bytes());
     Ok(hex::encode(mac.finalize().into_bytes()))
 }
@@ -51,14 +59,23 @@ pub fn build_order_url(order_id: i32) -> Result<String, OrderUrlError> {
 /// Returns `Err(OrderUrlError::InvalidSignature)` for a tampered signature and
 /// `Err(OrderUrlError::Expired)` when `exp` is in the past.
 pub fn verify_order_url(order_id: i32, exp: u64, sig: &str) -> Result<(), OrderUrlError> {
+    let config = Config::get().map_err(|_| OrderUrlError::Config)?;
+    verify_order_url_with_key(&config.qr_signing_secret, order_id, exp, sig)
+}
+
+pub fn verify_order_url_with_key(
+    secret: &str,
+    order_id: i32,
+    exp: u64,
+    sig: &str,
+) -> Result<(), OrderUrlError> {
     let now = chrono::Utc::now().timestamp() as u64;
     if now >= exp {
         return Err(OrderUrlError::Expired);
     }
 
-    let config = Config::get().map_err(|_| OrderUrlError::Config)?;
-    let mut mac = HmacSha256::new_from_slice(config.qr_signing_secret.as_bytes())
-        .map_err(|_| OrderUrlError::SigningKey)?;
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).map_err(|_| OrderUrlError::SigningKey)?;
     mac.update(format!("order_id={}&exp={}", order_id, exp).as_bytes());
 
     let provided = hex::decode(sig).map_err(|_| OrderUrlError::InvalidSignature)?;
