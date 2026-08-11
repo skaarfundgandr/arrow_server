@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, AsyncMysqlConnection, RunQueryDsl};
 
 pub struct RoleRepo {}
@@ -55,16 +54,13 @@ impl RoleRepo {
             )
         })?;
 
-        conn.transaction(|connection| {
-            async move {
-                sql_query("UPDATE roles SET permissions = ? WHERE role_id = ?")
-                    .bind::<Text, _>(perm.as_str())
-                    .bind::<Integer, _>(id)
-                    .execute(connection)
-                    .await?;
-                Ok(())
-            }
-            .scope_boxed()
+        conn.transaction(async |connection| {
+            sql_query("UPDATE roles SET permissions = ? WHERE role_id = ?")
+                .bind::<Text, _>(perm.as_str())
+                .bind::<Integer, _>(id)
+                .execute(connection)
+                .await?;
+            Ok(())
         })
         .await
     }
@@ -105,16 +101,13 @@ impl RoleRepo {
             )
         })?;
 
-        conn.transaction(|connection| {
-            async move {
-                sql_query("UPDATE roles SET permissions = ? WHERE role_id = ?")
-                    .bind::<Text, _>(perm_str)
-                    .bind::<Integer, _>(id)
-                    .execute(connection)
-                    .await?;
-                Ok(())
-            }
-            .scope_boxed()
+        conn.transaction(async |connection| {
+            sql_query("UPDATE roles SET permissions = ? WHERE role_id = ?")
+                .bind::<Text, _>(perm_str)
+                .bind::<Integer, _>(id)
+                .execute(connection)
+                .await?;
+            Ok(())
         })
         .await
     }
@@ -183,15 +176,12 @@ impl Repository for RoleRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::insert_into(roles)
-                        .values(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::insert_into(roles)
+                    .values(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -217,15 +207,12 @@ impl Repository for RoleRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::update(roles.filter(role_id.eq(id)))
-                        .set(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::update(roles.filter(role_id.eq(id)))
+                    .set(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -247,14 +234,11 @@ impl Repository for RoleRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::delete(roles.filter(role_id.eq(id)))
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::delete(roles.filter(role_id.eq(id)))
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {

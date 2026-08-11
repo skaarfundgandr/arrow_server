@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, AsyncMysqlConnection, RunQueryDsl};
 
 pub struct ProductRepo {}
@@ -103,15 +102,12 @@ impl Repository for ProductRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::insert_into(products)
-                        .values(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::insert_into(products)
+                    .values(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -137,15 +133,12 @@ impl Repository for ProductRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::update(products.filter(product_id.eq(id)))
-                        .set(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::update(products.filter(product_id.eq(id)))
+                    .set(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -167,14 +160,11 @@ impl Repository for ProductRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::delete(products.filter(product_id.eq(id)))
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::delete(products.filter(product_id.eq(id)))
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {

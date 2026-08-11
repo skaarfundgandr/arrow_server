@@ -4,7 +4,6 @@ use crate::data::models::user_roles::NewUserRole;
 use diesel::prelude::*;
 use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, AsyncMysqlConnection, RunQueryDsl};
 
 pub struct UserRoleRepo {}
@@ -34,15 +33,12 @@ impl UserRoleRepo {
             role_id: role_id_val,
         };
 
-        conn.transaction(|connection| {
-            async move {
-                diesel::insert_into(user_roles)
-                    .values(&new_item)
-                    .execute(connection)
-                    .await?;
-                Ok(())
-            }
-            .scope_boxed()
+        conn.transaction(async |connection| {
+            diesel::insert_into(user_roles)
+                .values(&new_item)
+                .execute(connection)
+                .await?;
+            Ok(())
         })
         .await
     }
@@ -62,18 +58,15 @@ impl UserRoleRepo {
             )
         })?;
 
-        conn.transaction(|connection| {
-            async move {
-                diesel::delete(
-                    user_roles
-                        .filter(user_id.eq(user_id_val))
-                        .filter(role_id.eq(role_id_val)),
-                )
-                .execute(connection)
-                .await?;
-                Ok(())
-            }
-            .scope_boxed()
+        conn.transaction(async |connection| {
+            diesel::delete(
+                user_roles
+                    .filter(user_id.eq(user_id_val))
+                    .filter(role_id.eq(role_id_val)),
+            )
+            .execute(connection)
+            .await?;
+            Ok(())
         })
         .await
     }

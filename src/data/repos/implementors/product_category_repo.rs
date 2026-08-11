@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, AsyncMysqlConnection, RunQueryDsl};
 
 pub struct ProductCategoryRepo;
@@ -94,14 +93,11 @@ impl ProductCategoryRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::delete(product_categories.filter(pc_product_id.eq(product_id)))
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::delete(product_categories.filter(pc_product_id.eq(product_id)))
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -177,15 +173,12 @@ impl Repository for ProductCategoryRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::insert_into(product_categories)
-                        .values(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::insert_into(product_categories)
+                    .values(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -213,19 +206,16 @@ impl Repository for ProductCategoryRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::update(
-                        product_categories
-                            .filter(product_id.eq(id.0))
-                            .filter(category_id.eq(id.1)),
-                    )
-                    .set(&item)
-                    .execute(connection)
-                    .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::update(
+                    product_categories
+                        .filter(product_id.eq(id.0))
+                        .filter(category_id.eq(id.1)),
+                )
+                .set(&item)
+                .execute(connection)
+                .await?;
+                Ok(())
             })
             .await
         {
@@ -249,18 +239,15 @@ impl Repository for ProductCategoryRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::delete(
-                        product_categories
-                            .filter(product_id.eq(id.0))
-                            .filter(category_id.eq(id.1)),
-                    )
-                    .execute(connection)
-                    .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::delete(
+                    product_categories
+                        .filter(product_id.eq(id.0))
+                        .filter(category_id.eq(id.1)),
+                )
+                .execute(connection)
+                .await?;
+                Ok(())
             })
             .await
         {

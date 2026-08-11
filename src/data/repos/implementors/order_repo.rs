@@ -8,7 +8,6 @@ use bigdecimal::BigDecimal;
 use diesel::prelude::*;
 use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, AsyncMysqlConnection, RunQueryDsl};
 use std::collections::HashMap;
 
@@ -134,37 +133,34 @@ impl OrderRepo {
             )
         })?;
 
-        conn.transaction::<_, result::Error, _>(|connection| {
-            async move {
-                diesel::insert_into(orders)
-                    .values(&new_order)
-                    .execute(connection)
-                    .await?;
-
-                let new_id: i32 = diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>(
-                    "LAST_INSERT_ID()",
-                ))
-                .get_result(connection)
+        conn.transaction::<_, result::Error, _>(async |connection| {
+            diesel::insert_into(orders)
+                .values(&new_order)
+                .execute(connection)
                 .await?;
 
-                let new_items: Vec<NewOrderProduct> = items
-                    .into_iter()
-                    .map(|(pid, qty, price)| NewOrderProduct {
-                        order_id: new_id,
-                        product_id: pid,
-                        quantity: qty,
-                        unit_price: price,
-                    })
-                    .collect();
+            let new_id: i32 = diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>(
+                "LAST_INSERT_ID()",
+            ))
+            .get_result(connection)
+            .await?;
 
-                diesel::insert_into(order_products)
-                    .values(&new_items)
-                    .execute(connection)
-                    .await?;
+            let new_items: Vec<NewOrderProduct> = items
+                .into_iter()
+                .map(|(pid, qty, price)| NewOrderProduct {
+                    order_id: new_id,
+                    product_id: pid,
+                    quantity: qty,
+                    unit_price: price,
+                })
+                .collect();
 
-                Ok(new_id)
-            }
-            .scope_boxed()
+            diesel::insert_into(order_products)
+                .values(&new_items)
+                .execute(connection)
+                .await?;
+
+            Ok(new_id)
         })
         .await
     }
@@ -188,18 +184,15 @@ impl OrderRepo {
             )
         })?;
 
-        conn.transaction(|connection| {
-            async move {
-                diesel::update(
-                    orders
-                        .filter(order_id_col.eq(order_id))
-                        .filter(payment_status.eq_any(["unpaid", "failed"])),
-                )
-                .set(payment_status.eq(new_status))
-                .execute(connection)
-                .await
-            }
-            .scope_boxed()
+        conn.transaction(async |connection| {
+            diesel::update(
+                orders
+                    .filter(order_id_col.eq(order_id))
+                    .filter(payment_status.eq_any(["unpaid", "failed"])),
+            )
+            .set(payment_status.eq(new_status))
+            .execute(connection)
+            .await
         })
         .await
     }
@@ -312,15 +305,12 @@ impl Repository for OrderRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::insert_into(orders)
-                        .values(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::insert_into(orders)
+                    .values(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -346,15 +336,12 @@ impl Repository for OrderRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::update(orders.filter(order_id.eq(id)))
-                        .set(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::update(orders.filter(order_id.eq(id)))
+                    .set(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -376,14 +363,11 @@ impl Repository for OrderRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::delete(orders.filter(order_id.eq(id)))
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::delete(orders.filter(order_id.eq(id)))
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {

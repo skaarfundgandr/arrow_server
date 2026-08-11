@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, AsyncMysqlConnection, RunQueryDsl};
 
 pub struct UserRepo {}
@@ -105,15 +104,12 @@ impl Repository for UserRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::insert_into(users)
-                        .values(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::insert_into(users)
+                    .values(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -138,15 +134,12 @@ impl Repository for UserRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::update(users.filter(user_id.eq(id)))
-                        .set(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::update(users.filter(user_id.eq(id)))
+                    .set(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -167,14 +160,11 @@ impl Repository for UserRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::delete(users.filter(user_id.eq(id)))
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::delete(users.filter(user_id.eq(id)))
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {

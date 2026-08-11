@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use diesel::prelude::*;
 use diesel::result;
 use diesel_async::pooled_connection::deadpool::Object;
-use diesel_async::scoped_futures::ScopedFutureExt;
 use diesel_async::{AsyncConnection, AsyncMysqlConnection, RunQueryDsl};
 
 /// Composite key for OrderProduct (order_id, product_id)
@@ -145,15 +144,12 @@ impl Repository for OrderProductRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::insert_into(order_products)
-                        .values(&item)
-                        .execute(connection)
-                        .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::insert_into(order_products)
+                    .values(&item)
+                    .execute(connection)
+                    .await?;
+                Ok(())
             })
             .await
         {
@@ -181,19 +177,16 @@ impl Repository for OrderProductRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::update(
-                        order_products
-                            .filter(order_id.eq(id.order_id))
-                            .filter(product_id.eq(id.product_id)),
-                    )
-                    .set(&item)
-                    .execute(connection)
-                    .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::update(
+                    order_products
+                        .filter(order_id.eq(id.order_id))
+                        .filter(product_id.eq(id.product_id)),
+                )
+                .set(&item)
+                .execute(connection)
+                .await?;
+                Ok(())
             })
             .await
         {
@@ -217,18 +210,15 @@ impl Repository for OrderProductRepo {
         })?;
 
         match conn
-            .transaction(|connection| {
-                async move {
-                    diesel::delete(
-                        order_products
-                            .filter(order_id.eq(id.order_id))
-                            .filter(product_id.eq(id.product_id)),
-                    )
-                    .execute(connection)
-                    .await?;
-                    Ok(())
-                }
-                .scope_boxed()
+            .transaction(async |connection| {
+                diesel::delete(
+                    order_products
+                        .filter(order_id.eq(id.order_id))
+                        .filter(product_id.eq(id.product_id)),
+                )
+                .execute(connection)
+                .await?;
+                Ok(())
             })
             .await
         {
