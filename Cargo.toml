@@ -39,6 +39,8 @@ tower-http = { version = "0.7.0", features = ["cors"] }
 tower_governor = { version = "0.8", features = ["axum"] }
 tracing = { version = "0.1.44", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+# rust_crypto pulls rsa 0.9 (RUSTSEC-2023-0071, no fixed release); this server
+# only signs/verifies HS256 and never performs RSA operations, so it is accepted
 jsonwebtoken = { version = "11.0.0", features = ["rust_crypto"] }
 axum-extra = { version = "0.12.6", features = ["typed-header"] }
 serde_with = "3.22.0"
