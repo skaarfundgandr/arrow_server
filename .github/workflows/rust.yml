@@ -35,6 +35,3 @@ jobs:
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: Build
         run: cargo build --locked --all-targets
-      # Integration runs require a MySQL service and environment; intentionally omitted here.
-      - name: Compile tests
-        run: cargo test --locked --no-run
