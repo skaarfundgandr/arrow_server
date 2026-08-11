@@ -35,7 +35,7 @@ Built with Rust, [Axum](https://crates.io/crates/axum), [diesel-async](https://c
 cargo install diesel_cli --version 2.3.12 --no-default-features --features mysql
 ```
 
-For a faster prebuilt installation, `cargo binstall diesel_cli` is an alternative.
+For a faster prebuilt installation, `cargo binstall diesel_cli@2.3.12` is an alternative.
 
 ### Native MySQL client
 
@@ -212,7 +212,7 @@ The brief recommended a Laravel (PHP) or Node.js stack, and Rust is a deliberate
 - **Compile-time guarantees** — the type system catches null-deref, mismatched types and concurrency bugs at build time rather than at runtime; the whole HTTP layer is statically typed end to end (request DTOs → services → response mappers).
 - **Performance** — Axum on Tokio delivers very high throughput with low, predictable latency and near-zero memory footprint per connection, which matters for a point-of-sale-adjacent workload on cheap hardware.
 - **Correctness-first data layer** — `diesel-async` compiles SQL against the schema at compile time, so a renamed column is a compile error, not a 500 at 2 a.m.; `BigDecimal` avoids floating-point money bugs that PHP/JS are prone to.
-- **Single static binary** — `cargo build --release` produces one binary with no runtime dependencies: trivial to containerize (see `Dockerfile`) and deploy.
+- **Single binary** — `cargo build --release` produces one binary whose only native runtime dependency is the MySQL/MariaDB client shared library (shipped as `libmariadb3` in the container image): trivial to containerize (see `Dockerfile`) and deploy.
 - **Cost** — no PHP/Node runtime on servers; the trade-off is a slower initial development cadence (borrow checker), which the repository-pattern/GAT structure and a small route surface keep manageable.
 
 ## Project Structure

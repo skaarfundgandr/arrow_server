@@ -16,7 +16,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release
 
-# Debian 13 is current; pin this base to a sha256 digest for reproducible deployments.
+# Debian 13 (trixie) slim, pinned by major-version tag; optionally pin to a sha256 digest for stricter reproducibility.
 FROM debian:13-slim AS runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libmariadb3 \
