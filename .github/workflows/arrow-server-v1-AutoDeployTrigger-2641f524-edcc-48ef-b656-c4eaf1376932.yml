@@ -37,7 +37,7 @@ jobs:
           appSourcePath: ${{ github.workspace }}
           _dockerfilePathKey_: _dockerfilePath_
           _targetLabelKey_: _targetLabel_
-          registryUrl: schoolcontregistry.azurecr.io
+          registryUrl: schoolregistry.azurecr.io
           registryUsername: ${{ secrets.ARROWSERVERV1_REGISTRY_USERNAME }}
           registryPassword: ${{ secrets.ARROWSERVERV1_REGISTRY_PASSWORD }}
           containerAppName: arrow-server
