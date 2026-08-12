@@ -4,19 +4,19 @@ name: Trigger auto deployment for arrow-server-v1
 on:
   # Automatically trigger it when detected changes in repo
   push:
-    branches: 
+    branches:
       [ master ]
     paths:
     - '**'
     - '.github/workflows/arrow-server-v1-AutoDeployTrigger-2641f524-edcc-48ef-b656-c4eaf1376932.yml'
 
-  # Allow manual trigger 
-  workflow_dispatch:      
+  # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions: 
+    permissions:
       id-token: write #This is required for requesting the OIDC JWT Token
       contents: read #Required when GH token is used to authenticate with private repo
 
@@ -40,10 +40,8 @@ jobs:
           registryUrl: schoolcontregistry.azurecr.io
           registryUsername: ${{ secrets.ARROWSERVERV1_REGISTRY_USERNAME }}
           registryPassword: ${{ secrets.ARROWSERVERV1_REGISTRY_PASSWORD }}
-          containerAppName: arrow-server-v1
+          containerAppName: arrow-server
           resourceGroup: school_group
-          imageToBuild: schoolcontregistry.azurecr.io/arrow-server-v1:${{ github.sha }}
+          imageToBuild: schoolregistry.azurecr.io/arrow-server:${{ github.sha }}
           _buildArgumentsKey_: |
             _buildArgumentsValues_
-
-
